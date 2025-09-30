@@ -1,0 +1,29 @@
+state: "Texas"
+direction: LR
+lanes:
+  - key: connect
+  - key: state_portal
+
+steps:
+  - id: open_connect
+    lane: connect
+    type: action
+    label: "Open InsCipher Connect"
+    next: start_filing
+
+  - id: start_filing
+    lane: connect
+    type: action
+    label: "Start New Filing"
+    next: portal_login
+
+  - id: portal_login
+    lane: state_portal
+    type: action
+    label: "Log in to TX Portal"
+    next: submit_filing
+
+  - id: submit_filing
+    lane: state_portal
+    type: action
+    label: "Submit Filing"
