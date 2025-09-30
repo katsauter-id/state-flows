@@ -1,9 +1,3 @@
-state: "Texas"
-direction: LR
-lanes:
-  - key: connect
-  - key: state_portal
-
 steps:
   - id: open_connect
     lane: connect
@@ -21,7 +15,20 @@ steps:
     lane: state_portal
     type: action
     label: "Log in to TX Portal"
-    next: submit_filing
+    next: address_check
+
+  - id: address_check
+    lane: state_portal
+    type: decision
+    label: "Address mismatch?"
+    yes_to: fix_address
+    no_to: submit_filing
+
+  - id: fix_address
+    lane: connect
+    type: action
+    label: "Fix address in Connect"
+    next: portal_login
 
   - id: submit_filing
     lane: state_portal
