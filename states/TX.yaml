@@ -1,3 +1,9 @@
+state: "Texas"
+direction: LR
+lanes:
+  - key: connect
+  - key: state_portal
+
 steps:
   - id: open_connect
     lane: connect
