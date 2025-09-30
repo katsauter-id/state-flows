@@ -2,69 +2,88 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>TX Flow (Live from YAML)</title>
+  <title>Texas Flow (Live from YAML)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- libs -->
   <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 16px; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
     #chart { border: 1px solid #ddd; padding: 12px; border-radius: 8px; }
+    .error { color: #b00020; white-space: pre-wrap; }
+    pre { background: #f7f7f7; padding: 12px; border-radius: 6px; overflow: auto; }
   </style>
 </head>
 <body>
   <h1>Texas Filing Flow</h1>
-  <div id="chart" class="mermaid">Loading…</div>
+  <div id="chart">Loading…</div>
+  <div id="debug"></div>
+
   <script>
-    // 1) Tiny YAML -> Mermaid adapter (align to your schema)
+    // Minimal YAML -> Mermaid adapter (matches your current YAML fields)
     function toMermaid(data) {
-      const lanes = {};
+      const byLane = {};
       (data.steps || []).forEach(s => {
         const lane = s.lane || s.lane_key || 'default';
-        lanes[lane] = lanes[lane] || [];
-        lanes[lane].push(s);
+        (byLane[lane] ||= []).push(s);
       });
-      const laneTitle = k => ({connect:"InsCipher Connect", state_portal:"State Portal"}[k] || k);
-      const dir = (data.direction || 'LR');
+      const laneTitle = k => ({ connect: "InsCipher Connect", state_portal: "State Portal" }[k] || k);
+      const dir = data.direction || 'LR';
       const lines = [`flowchart ${dir}`];
 
       // nodes by lane
-      Object.entries(lanes).forEach(([k,steps]) => {
-        lines.push(`  subgraph ${k.toUpperCase()}[${laneTitle(k)}]`);
-        steps.forEach(s => {
-          const label = s.label || s.id;
-          const shape = (s.type === 'decision')
-            ? `${s.id}{${label}}`
-            : `${s.id}[${label}]`;
-          lines.push(`    ${shape}`);
-        });
-        lines.push(`  end`);
-      });
-
+      for (const [lane, steps] of Object.entries(byLane)) {
+        lines.push(`  subgraph ${lane.toUpperCase()}[${laneTitle(lane)}]`);
+        for (const s of steps) {
+          const label = (s.label || s.id).replace(/\[/g, '(').replace(/\]/g, ')');
+          const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
+          lines.push(`    ${node}`);
+        }
+        lines.push('  end');
+      }
       // edges
-      (data.steps || []).forEach(s => {
+      for (const s of (data.steps || [])) {
         if (s.type === 'decision') {
           if (s.yes_to) lines.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
           if (s.no_to)  lines.push(`  ${s.id} -- No --> ${s.no_to}`);
         } else if (s.next) {
           lines.push(`  ${s.id} --> ${s.next}`);
         }
-      });
+      }
       return lines.join('\n');
     }
 
-    // 2) Fetch YAML and render
     async function main() {
-      const res = await fetch('./states/TX.yaml'); // adjust path if needed
+      const yamlUrl = './states/TX.yaml'; // tx.html in root, YAML in /states
+      const res = await fetch(yamlUrl, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`Fetch failed (${res.status}) for ${yamlUrl}`);
       const text = await res.text();
-      const data = jsyaml.load(text);
+
+      let data;
+      try {
+        data = jsyaml.load(text);
+      } catch (e) {
+        throw new Error('YAML parse error: ' + e.message + '\n---\n' + text.slice(0, 400));
+      }
+
       const mer = toMermaid(data);
-      const el = document.getElementById('chart');
-      el.innerHTML = mer; // replaces textContent
+
+      // Initialize Mermaid and render to SVG explicitly
       mermaid.initialize({ startOnLoad: false });
-      mermaid.run({ querySelector: '#chart' });
+      const { svg } = await mermaid.render('txDiagram', mer);
+      document.getElementById('chart').innerHTML = svg;
+
+      // Optional: show generated Mermaid for debugging
+      document.getElementById('debug').innerHTML =
+        '<h3>Generated Mermaid</h3><pre>' +
+        mer.replace(/[&<>]/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[s])) +
+        '</pre>';
     }
+
     main().catch(err => {
-      document.getElementById('chart').textContent = 'Error loading diagram: ' + err;
+      const c = document.getElementById('chart');
+      c.className = 'error';
+      c.textContent = 'Error loading diagram:\n' + err.message;
     });
   </script>
 </body>
