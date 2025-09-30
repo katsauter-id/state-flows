@@ -17,7 +17,7 @@
     #chart svg{width:100% !important;height:auto !important}
     .foot{margin-top:8px;color:var(--muted);font-size:.85rem}
     .error{color:#b00020;white-space:pre-wrap}
-    a{color:#373f51;text-decoration:none}
+    a{color:#009ddc;text-decoration:none}
   </style>
 </head>
 <body>
@@ -28,18 +28,18 @@
   </div>
 
   <script>
-    // --- Mermaid init with InsCipher brand vibes ---
+    // --- Mermaid init with InsCipher brand + straight arrows ---
     mermaid.initialize({
       startOnLoad: false,
       theme: "base",
       flowchart: { useMaxWidth:true, curve:"linear", padding:12, htmlLabels:true },
       themeVariables: {
         fontFamily: 'Tahoma, Arial, sans-serif',
-        primaryColor: '#ffffff',     // node background
-        primaryTextColor: '#373f51', // dark navy text
-        primaryBorderColor: '#373f51', // dark navy border
-        lineColor: '#616161',        // neutral gray edges
-        tertiaryColor: '#f04f23'     // accent orange
+        primaryColor: '#ffffff',
+        primaryTextColor: '#373f51',
+        primaryBorderColor: '#009ddc',
+        lineColor: '#616161',
+        tertiaryColor: '#f04f23'
       }
     });
 
@@ -53,74 +53,53 @@
     }
 
     // YAML -> Mermaid with lanes, edges, and brand styling
-   function toMermaid(data) {
-  const byLane = {};
-  (data.steps || []).forEach(s => {
-    const lane = s.lane || s.lane_key || 'default';
-    (byLane[lane] ||= []).push(s);
-  });
+    function toMermaid(data) {
+      const byLane = {};
+      (data.steps || []).forEach(s => {
+        const lane = s.lane || s.lane_key || 'default';
+        (byLane[lane] ||= []).push(s);
+      });
+      const laneTitle = k => ({ connect:"InsCipher Connect", state_portal:"State Portal" }[k] || k);
+      const dir = data.direction || 'LR'; // set TB in YAML for vertical
+      const lines = [`flowchart ${dir}`];
 
-  const laneTitle = k => ({ connect: "InsCipher Connect", state_portal: "State Portal" }[k] || k);
-  const dir = data.direction || 'LR'; // use TB for vertical
-  const lines = [`flowchart ${dir}`];
+      // Lanes & nodes
+      for (const [lane, steps] of Object.entries(byLane)) {
+        const laneId = lane.toUpperCase();
+        lines.push(`  subgraph ${laneId}[${laneTitle(lane)}]`);
+        for (const s of steps) {
+          const label = (s.label || s.id).replace(/\[/g,'(').replace(/\]/g,')');
+          const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
+          lines.push(`    ${node}`);
+        }
+        lines.push('  end');
+      }
 
-  // Lanes & nodes
-  for (const [lane, steps] of Object.entries(byLane)) {
-    const laneId = lane.toUpperCase();
-    lines.push(`  subgraph ${laneId}[${laneTitle(lane)}]`);
-    for (const s of steps) {
-      const label = (s.label || s.id).replace(/\[/g,'(').replace(/\]/g,')');
-      const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
-      lines.push(`    ${node}`);
-    }
-    lines.push('  end');
-  }
+      // Edges
+      for (const s of (data.steps || [])) {
+        if (s.type === 'decision') {
+          if (s.yes_to) lines.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
+          if (s.no_to)  lines.push(`  ${s.id} -- No --> ${s.no_to}`);
+        } else if (s.next) {
+          lines.push(`  ${s.id} --> ${s.next}`);
+        }
+      }
 
-  // Edges
-  for (const s of (data.steps || [])) {
-    if (s.type === 'decision') {
-      if (s.yes_to) lines.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
-      if (s.no_to)  lines.push(`  ${s.id} -- No --> ${s.no_to}`);
-    } else if (s.next) {
-      lines.push(`  ${s.id} --> ${s.next}`);
-    }
-  }
-
-  // === Neutral lane styling + branded nodes ===
-  lines.push(
-    // lane backgrounds = neutral gray, not purple/blue
-    'style CONNECT fill:#f8f9fa,stroke:#009ddc,stroke-width:1.5px',
-    'style STATE_PORTAL fill:#f8f9fa,stroke:#468c98,stroke-width:1.5px',
-
-    // node classes
-    'classDef action   fill:#ffffff,stroke:#009ddc,stroke-width:1.5px,color:#373f51,font-family:Tahoma',
-    'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#373f51,font-family:Tahoma',
-
-    // link style
-    'linkStyle default stroke:#616161,stroke-width:1.5px,opacity:0.9'
-  );
-
-  // Apply node classes
-  (data.steps || []).forEach(s => {
-    const cls = s.type === 'decision' ? 'decision' : 'action';
-    lines.push(`class ${s.id} ${cls}`);
-  });
-
-  return lines.join('\n');
-}
-
-
-      // Lane styles (soft backgrounds + brand borders)
+      // === Neutral lane styling + branded nodes ===
       lines.push(
-        'style CONNECT fill:#d2d4d9,stroke:#468c98,stroke-width:1.5px',
-        'style STATE_PORTAL fill:##d2d4d9,stroke:#468c98,stroke-width:1.5px',
-        // Node classes
-        'classDef action   fill:#d2d4d9,stroke:#373f51,stroke-width:1.5px,color:#373f51,font-family:Tahoma',
-        'classDef decision fill:#fff7ed,stroke:#373f51,stroke-width:2px,color:#373f51,font-family:Tahoma',
-        // Links
-        'linkStyle default stroke:#616161,stroke-width:1.5px,opacity:.9'
+        'style CONNECT fill:#f8f9fa,stroke:#009ddc,stroke-width:1.5px',
+        'style STATE_PORTAL fill:#f8f9fa,stroke:#468c98,stroke-width:1.5px',
+
+        'classDef action   fill:#ffffff,stroke:#009ddc,stroke-width:1.5px,color:#373f51,font-family:Tahoma',
+        'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#373f51,font-family:Tahoma',
+
+        'linkStyle default stroke:#616161,stroke-width:1.5px,opacity:0.9'
       );
-      (data.steps || []).forEach(s => lines.push(`class ${s.id} ${s.type === 'decision' ? 'decision':'action'}`));
+
+      (data.steps || []).forEach(s => {
+        const cls = s.type === 'decision' ? 'decision' : 'action';
+        lines.push(`class ${s.id} ${cls}`);
+      });
 
       return lines.join('\n');
     }
