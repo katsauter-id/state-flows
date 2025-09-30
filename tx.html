@@ -33,38 +33,62 @@
     }
 
     // YAML -> Mermaid adapter (lanes + steps + edges)
-    function toMermaid(data) {
-      const byLane = {};
-      (data.steps || []).forEach(s => {
-        const lane = s.lane || s.lane_key || 'default';
-        (byLane[lane] ||= []).push(s);
-      });
+   function toMermaid(data) {
+  const byLane = {};
+  (data.steps || []).forEach(s => {
+    const lane = s.lane || s.lane_key || 'default';
+    (byLane[lane] ||= []).push(s);
+  });
 
-      const laneTitle = k => ({ connect: "InsCipher Connect", state_portal: "State Portal" }[k] || k);
-      const dir = data.direction || 'LR';
-      const lines = [`flowchart ${dir}`];
+  const laneTitle = k => ({ connect: "InsCipher Connect", state_portal: "State Portal" }[k] || k);
+  const dir = data.direction || 'LR'; // use "TB" for vertical
+  const lines = [`flowchart ${dir}`];
 
-      // Nodes grouped by lane
-      for (const [lane, steps] of Object.entries(byLane)) {
-        lines.push(`  subgraph ${lane.toUpperCase()}[${laneTitle(lane)}]`);
-        for (const s of steps) {
-          const label = (s.label || s.id).replace(/\[/g, '(').replace(/\]/g, ')'); // avoid bracket collisions
-          const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
-          lines.push(`    ${node}`);
-        }
-        lines.push('  end');
-      }
+  // lanes & nodes
+  for (const [lane, steps] of Object.entries(byLane)) {
+    const laneId = lane.toUpperCase(); // CONNECT / STATE_PORTAL
+    lines.push(`  subgraph ${laneId}[${laneTitle(lane)}]`);
+    for (const s of steps) {
+      const label = (s.label || s.id).replace(/\[/g,'(').replace(/\]/g,')');
+      const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
+      lines.push(`    ${node}`);
+    }
+    lines.push('  end');
+  }
 
-      // Edges
-      for (const s of (data.steps || [])) {
-        if (s.type === 'decision') {
-          if (s.yes_to) lines.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
-          if (s.no_to)  lines.push(`  ${s.id} -- No --> ${s.no_to}`);
-        } else if (s.next) {
-          lines.push(`  ${s.id} --> ${s.next}`);
-        }
-      }
-      return lines.join('\n');
+  // edges
+  for (const s of (data.steps || [])) {
+    if (s.type === 'decision') {
+      if (s.yes_to) lines.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
+      if (s.no_to)  lines.push(`  ${s.id} -- No --> ${s.no_to}`);
+    } else if (s.next) {
+      lines.push(`  ${s.id} --> ${s.next}`);
+    }
+  }
+
+  // === InsCipher styling ===
+  lines.push(
+    // lane backgrounds & borders
+    'style CONNECT fill:#eef2ff,stroke:#009ddc,stroke-width:1.5px',
+    'style STATE_PORTAL fill:#ecfeff,stroke:#468c98,stroke-width:1.5px',
+
+    // node classes (Tahoma + brand colors)
+    'classDef action   fill:#ffffff,stroke:#009ddc,stroke-width:1.5px,color:#373f51,font-family:Tahoma',
+    'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#373f51,font-family:Tahoma',
+
+    // link styling
+    'linkStyle default stroke:#616161,stroke-width:1.5px,opacity:0.9'
+  );
+
+  // apply classes per node type
+  (data.steps || []).forEach(s => {
+    const cls = s.type === 'decision' ? 'decision' : 'action';
+    lines.push(`class ${s.id} ${cls}`);
+  });
+
+  return lines.join('\n');
+}
+
     }
 
     async function main() {
