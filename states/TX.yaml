@@ -1,5 +1,5 @@
 state: "Texas"
-direction: LR
+direction: TB
 lanes:
   - key: connect
   - key: state_portal
