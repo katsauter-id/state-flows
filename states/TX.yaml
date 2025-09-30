@@ -1,42 +1,30 @@
-state: "Texas"
-direction: TB
-lanes:
-  - key: connect
-  - key: state_portal
-
 steps:
-  - id: open_connect
-    lane: connect
-    type: action
-    label: "Open InsCipher Connect"
-    next: start_filing
-
-  - id: start_filing
-    lane: connect
-    type: action
-    label: "Start New Filing"
-    next: portal_login
-
   - id: portal_login
     lane: state_portal
     type: action
     label: "Log in to TX Portal"
-    next: address_check
+    action: browser.goto
+    url: "https://sltx.smart.filing/login"
 
-  - id: address_check
+  - id: enter_creds
+    lane: state_portal
+    type: action
+    label: "Enter creds"
+    action: browser.fill
+    selectors:
+      username: "#user"
+      password: "#pass"
+      submit:   "button[type=submit]"
+    inputs:
+      username: "${secrets.TX_USERNAME}"
+      password: "${secrets.TX_PASSWORD}"
+    next: check_login
+
+  - id: check_login
     lane: state_portal
     type: decision
-    label: "Address mismatch?"
-    yes_to: fix_address
-    no_to: submit_filing
-
-  - id: fix_address
-    lane: connect
-    type: action
-    label: "Fix address in Connect"
-    next: portal_login
-
-  - id: submit_filing
-    lane: state_portal
-    type: action
-    label: "Submit Filing"
+    label: "Authenticated?"
+    check: browser.exists
+    selector: "nav .dashboard"
+    yes_to: start_filing
+    no_to: login_error
