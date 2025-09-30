@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>TX Flow (Live from YAML)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; }
+    #chart { border: 1px solid #ddd; padding: 12px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Texas Filing Flow</h1>
+  <div id="chart" class="mermaid">Loading…</div>
+  <script>
+    // 1) Tiny YAML -> Mermaid adapter (align to your schema)
+    function toMermaid(data) {
+      const lanes = {};
+      (data.steps || []).forEach(s => {
+        const lane = s.lane || s.lane_key || 'default';
+        lanes[lane] = lanes[lane] || [];
+        lanes[lane].push(s);
+      });
+      const laneTitle = k => ({connect:"InsCipher Connect", state_portal:"State Portal"}[k] || k);
+      const dir = (data.direction || 'LR');
+      const lines = [`flowchart ${dir}`];
+
+      // nodes by lane
+      Object.entries(lanes).forEach(([k,steps]) => {
+        lines.push(`  subgraph ${k.toUpperCase()}[${laneTitle(k)}]`);
+        steps.forEach(s => {
+          const label = s.label || s.id;
+          const shape = (s.type === 'decision')
+            ? `${s.id}{${label}}`
+            : `${s.id}[${label}]`;
+          lines.push(`    ${shape}`);
+        });
+        lines.push(`  end`);
+      });
+
+      // edges
+      (data.steps || []).forEach(s => {
+        if (s.type === 'decision') {
+          if (s.yes_to) lines.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
+          if (s.no_to)  lines.push(`  ${s.id} -- No --> ${s.no_to}`);
+        } else if (s.next) {
+          lines.push(`  ${s.id} --> ${s.next}`);
+        }
+      });
+      return lines.join('\n');
+    }
+
+    // 2) Fetch YAML and render
+    async function main() {
+      const res = await fetch('./states/TX.yaml'); // adjust path if needed
+      const text = await res.text();
+      const data = jsyaml.load(text);
+      const mer = toMermaid(data);
+      const el = document.getElementById('chart');
+      el.textContent = mer;
+      mermaid.initialize({ startOnLoad: true });
+      mermaid.run({ querySelector: '#chart' });
+    }
+    main().catch(err => {
+      document.getElementById('chart').textContent = 'Error loading diagram: ' + err;
+    });
+  </script>
+</body>
+</html>
