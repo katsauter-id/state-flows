@@ -59,8 +59,8 @@
       const data = jsyaml.load(text);
       const mer = toMermaid(data);
       const el = document.getElementById('chart');
-      el.textContent = mer;
-      mermaid.initialize({ startOnLoad: true });
+      el.innerHTML = mer; // replaces textContent
+      mermaid.initialize({ startOnLoad: false });
       mermaid.run({ querySelector: '#chart' });
     }
     main().catch(err => {
