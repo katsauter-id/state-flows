@@ -80,12 +80,10 @@ function buildMermaid(data){
     el.textContent = mer;
 
     // init + run (use init for max compatibility)
-    mermaid.initialize({
-      startOnLoad:false,
-      theme:'base',
-      flowchart:{ htmlLabels:false, curve:'linear' }
-    });
-    mermaid.init(undefined, el);
+  mermaid.initialize({ startOnLoad:false, theme:'base', flowchart:{ htmlLabels:false, curve:'linear' } });
+const { svg } = await mermaid.render('txsvg', mer); // uses the mer string we built
+document.getElementById('m').outerHTML = svg; // swap the node with SVG
+
   } catch(e){
     document.getElementById('err').textContent = (e?.message || e);
     console.error(e);
