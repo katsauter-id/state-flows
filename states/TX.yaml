@@ -4,7 +4,7 @@ lanes:
   - key: connect
     title: "InsCipher Connect"
   - key: state_portal
-    title: "Texas State Portal"
+    title: "State Portal"
 
 steps:
   - id: open_connect
@@ -17,116 +17,31 @@ steps:
     lane: connect
     type: action
     label: "Start New Filing (select TX)"
-    next: entry_path
-
-  - id: entry_path
-    lane: connect
-    type: decision
-    label: "File via Connect or State Portal?"
-    yes_to: portal_login
-    no_to: portal_login
+    next: portal_login
 
   - id: portal_login
     lane: state_portal
     type: action
     label: "Log in to TX Portal"
-    next: docs_ok
+    next: address_check
 
-  - id: docs_ok
+  - id: address_check
     lane: state_portal
     type: decision
-    label: "Docs compiled?"
-    yes_to: exempt
-    no_to: collect_docs
+    label: "Address mismatch?"
+    yes_to: fix_address
+    no_to: upload_docs
 
-  - id: collect_docs
+  - id: fix_address
+    lane: connect
+    type: action
+    label: "Fix address in Connect (update and save)"
+    next: portal_login
+
+  - id: upload_docs
     lane: state_portal
     type: action
-    label: "Collect / Request Docs"
-    next: docs_ok
-
-  - id: exempt
-    lane: state_portal
-    type: decision
-    label: "Exemption applies?"
-    yes_to: handle_exemption
-    no_to: ecp
-
-  - id: handle_exemption
-    lane: state_portal
-    type: action
-    label: "Apply exemption handling SOP"
-
-  - id: ecp
-    lane: state_portal
-    type: decision
-    label: "Exempt Commercial Purchaser?"
-    yes_to: attach_ecp_form
-    no_to: choose_track
-
-  - id: attach_ecp_form
-    lane: state_portal
-    type: action
-    label: "Attach ECP Form"
-    next: choose_track
-
-  - id: choose_track
-    lane: state_portal
-    type: decision
-    label: "Stamping or SL Tax Track?"
-    yes_to: stamping_track
-    no_to: sl_tax_track
-
-  - id: stamping_track
-    lane: state_portal
-    type: action
-    label: "Stamping Fee Filing"
-    next: stamping_due_check
-
-  - id: stamping_due_check
-    lane: state_portal
-    type: decision
-    label: "Stamping Due?"
-    yes_to: late
-    no_to: submit_filing
-
-  - id: sl_tax_track
-    lane: state_portal
-    type: action
-    label: "SL Tax Filing"
-    next: prepay70k
-
-  - id: prepay70k
-    lane: state_portal
-    type: decision
-    label: "YTD SL Tax ≥ 70,000?"
-    yes_to: create_prepayment
-    no_to: sl_tax_due_check
-
-  - id: create_prepayment
-    lane: state_portal
-    type: action
-    label: "Create Prepayment"
-    next: sl_tax_due_check
-
-  - id: sl_tax_due_check
-    lane: state_portal
-    type: decision
-    label: "SL Tax Due?"
-    yes_to: late
-    no_to: submit_filing
-
-  - id: late
-    lane: state_portal
-    type: decision
-    label: "Past Due?"
-    yes_to: apply_late_matrix
-    no_to: submit_filing
-
-  - id: apply_late_matrix
-    lane: state_portal
-    type: action
-    label: "Apply Late Fee / Interest Matrix"
+    label: "Upload Required Docs (package, attachments)"
     next: submit_filing
 
   - id: submit_filing
@@ -145,46 +60,10 @@ steps:
   - id: retry_download
     lane: state_portal
     type: action
-    label: "Retry Download"
+    label: "Retry download (or open in new tab)"
     next: receipt_check
 
   - id: archive_receipt
     lane: connect
     type: action
-    label: "Archive Receipt in Connect"
-
-meta:
-  sl_tax_rate: "4.85%"
-  stamping_fee_rate: "0.04%"
-  filing_due_dates: "Individual: 60 days; Annual: March 1"
-  payment_frequency: "SL Tax annual; prepay monthly if ≥ $70K; Stamping monthly"
-  payment_due_dates: "SL Tax monthly prepay: 15th of following month; Annual: 3/1; Stamping: end of following month"
-  zero_reports:
-    sl_tax: "Annual zeros not required"
-    stamping: "Monthly zeros required"
-  late_penalties: "1–30 days late = 5%; 30+ days = 10%; interest starts day 61; $50/$100/$200 assessments; 365+ days = enforcement"
-  docs_required:
-    - "Declarations Page"
-    - "List of participating insurers + %"
-    - "Coverage parts/schedules (limits)"
-    - "Exclusions"
-    - "TX ZIP code"
-    - "Guaranty Fund Notice"
-    - "Complaint Notice"
-  exemptions:
-    - "International waters (>10.4 miles)"
-    - "FDIC receivership property"
-    - "NCUA conservatorship"
-    - "Federally chartered CU"
-    - "American Indian tribal lands"
-  ecp:
-    required: true
-    form: "https://drive.google.com/file/d/1tJSI5kgPCghY5C2BAe-YllIatOqz_3af/view"
-  who_files: "Agency or Broker"
-  fees_taxable: "All fees taxable"
-  amendment: "Amendment required"
-  signature: "Annual RPG SRT signed & notarized"
-  rounding: "No"
-  portals:
-    connect: "https://connect.inscipher.com"
-    state: "https://www.sltx.org/filings/"
+    label: "Archive receipt in Connect (link to record)"
