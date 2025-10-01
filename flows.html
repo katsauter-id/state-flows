@@ -2,194 +2,67 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>State Filing Flow</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>State Flow</title>
   <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
-    body{font-family:Inter, Tahoma, Arial, sans-serif; margin:24px; background:#f5f6f8; color:#111827}
-    .wrap{max-width:1100px;margin:0 auto}
-    h1{margin:0 0 8px;font-size:24px;font-weight:800}
-    .sub{color:#6b7280;margin-bottom:16px}
-    .bar{display:flex;gap:8px;align-items:center;margin:12px 0}
-    .btn{border:1px solid #e5e7eb;background:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;text-decoration:none;color:#111827}
-    .btn:hover{background:#f9fafb}
-    #chart{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px}
-    #chart svg{width:100% !important;height:auto !important}
-    pre{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:12px;overflow:auto;margin-top:12px}
-    #facts{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-top:20px}
-    #facts h3{margin-top:0}
-    #facts ul{margin:0;padding-left:20px;line-height:1.5}
+    body { font-family: Tahoma, Arial, sans-serif; margin: 16px; background: #fafafa }
+    #chart .mermaid { white-space: pre }
+    pre { background: #f6f6f6; padding: 10px; border-radius: 8px; overflow:auto }
   </style>
 </head>
 <body>
-<div class="wrap">
-  <h1 id="title">State Filing Flow</h1>
-  <div class="sub">Source: <span id="src"></span></div>
-
-  <div class="bar">
-    <a href="https://connect.inscipher.com" target="_blank" class="btn">File via Connect</a>
-    <a href="https://www.sltx.org/filings/" target="_blank" class="btn">File via TX Portal</a>
-    <button id="btnRefresh" class="btn">Refresh</button>
-    <button id="btnDownload" class="btn">Download SVG</button>
-  </div>
-
-  <div id="chart"><div id="m" class="mermaid">Loading…</div></div>
-
-  <h3 style="margin:16px 0 6px">Mermaid source</h3>
-  <pre id="mer"></pre>
-
-  <div id="facts">
-    <h3>Quick Facts</h3>
-    <ul id="factsList"></ul>
-  </div>
-</div>
+<h1 id="title">State Flow</h1>
+<div>Source: <span id="src"></span></div>
+<div id="chart"><div id="m" class="mermaid">Loading…</div></div>
+<h3>Mermaid source</h3>
+<pre id="mer"></pre>
 
 <script>
 (async function(){
   const qs = new URL(location.href).searchParams;
-  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";
+  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default to TX.yaml
   document.getElementById("src").textContent = yamlUrl;
 
-  async function getYaml(url){
-    const res = await fetch(url, { cache: "no-store" });
-    if(!res.ok) throw new Error("Fetch failed " + res.status + " for " + url);
-    const raw  = await res.text();
-    return jsyaml.load(raw);
-  }
+  // Fetch + parse YAML
+  const res = await fetch(yamlUrl, { cache: "no-store" });
+  if(!res.ok){ document.getElementById("chart").textContent = "Fetch failed " + res.status; return; }
+  const raw  = await res.text();
+  const data = jsyaml.load(raw);
 
-  // Keep labels simple + dash style; avoid Mermaid parser gotchas
+  // Label sanitizer -> EXACT “dash style” that rendered
   const esc = t => String(t||"")
-    .replace(/\s*\(([^)]+)\)/g, " - $1")   // (foo) ->  - foo
-    .replace(/\r?\n/g, " ")                // single line
-    .replace(/\[/g,"(").replace(/\]/g,")") // brackets
+    .replace(/\s*\(([^)]+)\)/g, " - $1")  // (foo) ->  - foo
+    .replace(/\r?\n/g, " ")               // single line
+    .replace(/\[/g,"(").replace(/\]/g,")")// avoid bracket collisions
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
     .trim();
 
-  function inferLane(id){
-    if (/^(open_connect|start_filing|fix_address|archive_receipt)/.test(id)) return 'connect';
-    return 'state_portal';
-  }
-
-  function buildMermaid(data){
-    const steps = (data.steps || []).map(s => ({
-      id: s.id,
-      type: s.type || 'action',
-      label: esc(s.label || s.id),
-      next: s.next,
-      yes_to: s.yes_to,
-      no_to: s.no_to,
-      lane: s.lane || s.lane_key || inferLane(s.id)
-    }));
-
-    const laneMap = {};
-    if (Array.isArray(data.lanes) && data.lanes.length){
-      data.lanes.forEach(l => laneMap[l.key] = l.title || l.name || l.key);
-    } else {
-      laneMap.connect = 'InsCipher Connect';
-      laneMap.state_portal = 'State Portal';
+  // Build Mermaid from YAML
+  const L = ["flowchart TB"];
+  (data.steps||[]).forEach(s=>{
+    const label = esc(s.label || s.id);
+    const node  = s.type==="decision" ? `${s.id}{${label}}` : `${s.id}[${label}]`;
+    L.push("    " + node);
+  });
+  (data.steps||[]).forEach(s=>{
+    if(s.type==="decision"){
+      if(s.yes_to) L.push(`    ${s.id} -- Yes --> ${s.yes_to}`);
+      if(s.no_to)  L.push(`    ${s.id} -- No --> ${s.no_to}`);
+    } else if(s.next){
+      L.push(`    ${s.id} --> ${s.next}`);
     }
+  });
 
-    const L = [];
-    L.push('flowchart TB');
+  const mer = L.join("\n");
+  document.getElementById("mer").textContent = mer;
 
-    // lanes + nodes
-    for (const lane of Object.keys(laneMap)){
-      const title = laneMap[lane] || lane;
-      const laneSteps = steps.filter(s => s.lane === lane);
-      if (!laneSteps.length) continue;
-      const laneId = lane.toUpperCase();
-      L.push(`  subgraph ${laneId}[${title}]`);
-      laneSteps.forEach(s => {
-        const node = s.type === 'decision' ? `${s.id}{${s.label}}` : `${s.id}[${s.label}]`;
-        L.push(`    ${node}`);
-      });
-      L.push('  end');
-      L.push('');
-    }
-
-    // edges
-    steps.forEach(s=>{
-      if (s.type === 'decision') {
-        if (s.yes_to) L.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
-        if (s.no_to)  L.push(`  ${s.id} -- No --> ${s.no_to}`);
-      } else if (s.next) {
-        L.push(`  ${s.id} --> ${s.next}`);
-      }
-    });
-
-    // styles: soft lane backgrounds (no outlines), rounded nodes
-    L.push(
-      'style CONNECT fill:#f8fafc,stroke:transparent,stroke-width:0px',
-      'style STATE_PORTAL fill:#f9fafb,stroke:transparent,stroke-width:0px',
-      'classDef action fill:#ffffff,stroke:#4f46e5,stroke-width:1.4px,color:#111827,rx:8,ry:8',
-      'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827,rx:12,ry:12'
-    );
-    steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
-
-    return L.join("\n");
-  }
-
-  async function render(){
-    try{
-      const data = await getYaml(yamlUrl);
-      document.getElementById("title").textContent = `${data.state || 'State'} Filing Flow`;
-
-      const mer = buildMermaid(data);
-      document.getElementById("mer").textContent = mer;
-
-      const el = document.getElementById("m");
-      el.textContent = mer;
-      el.removeAttribute("data-processed");
-
-      mermaid.initialize({ startOnLoad:false, theme:'default', flowchart:{ curve:'linear', htmlLabels:false } });
-      mermaid.init(undefined, el);
-
-      // Quick Facts
-      const facts = [];
-      if (data.meta) {
-        if (data.meta.sl_tax_rate) facts.push(`SL Tax Rate: ${data.meta.sl_tax_rate}`);
-        if (data.meta.stamping_fee_rate) facts.push(`Stamping Fee Rate: ${data.meta.stamping_fee_rate}`);
-        if (data.meta.filing_due_dates) facts.push(`Filing Due Dates: ${data.meta.filing_due_dates}`);
-        if (data.meta.payment_frequency) facts.push(`Payment Frequency: ${data.meta.payment_frequency}`);
-        if (data.meta.payment_due_dates) facts.push(`Payment Due Dates: ${data.meta.payment_due_dates}`);
-        if (data.meta.zero_reports) {
-          if (data.meta.zero_reports.sl_tax) facts.push(`Zero Reports (SL Tax): ${data.meta.zero_reports.sl_tax}`);
-          if (data.meta.zero_reports.stamping) facts.push(`Zero Reports (Stamping): ${data.meta.zero_reports.stamping}`);
-        }
-        if (data.meta.late_penalties) facts.push(`Late Penalties: ${data.meta.late_penalties}`);
-        if (data.meta.docs_required) facts.push(`Docs Required: ${data.meta.docs_required.join(", ")}`);
-        if (data.meta.exemptions) facts.push(`Exemptions: ${data.meta.exemptions.join(", ")}`);
-        if (data.meta.ecp) facts.push(`ECP Required: form link ${data.meta.ecp.form}`);
-        if (data.meta.who_files) facts.push(`Who Files: ${data.meta.who_files}`);
-        if (data.meta.fees_taxable) facts.push(`Fees Taxable: ${data.meta.fees_taxable}`);
-        if (data.meta.amendment) facts.push(`Amendment: ${data.meta.amendment}`);
-        if (data.meta.signature) facts.push(`Signature: ${data.meta.signature}`);
-        if (data.meta.rounding) facts.push(`Rounding: ${data.meta.rounding}`);
-      }
-      document.getElementById("factsList").innerHTML = facts.map(f=>`<li>${f}</li>`).join("");
-
-    } catch(e){
-      document.getElementById("m").textContent = "Error: " + (e?.message || e);
-      console.error(e);
-    }
-  }
-
-  function downloadSVG(){
-    const svg = document.querySelector('#chart svg');
-    if(!svg){ alert('No diagram yet. Click Refresh.'); return; }
-    const blob = new Blob([svg.outerHTML], {type:'image/svg+xml'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = (document.getElementById('title').textContent || 'diagram').replace(/\s+/g,'_') + '.svg';
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
-  document.getElementById('btnRefresh').onclick = () => render();
-  document.getElementById('btnDownload').onclick = () => downloadSVG();
-
-  render();
+  // Render (DOM-fed)
+  const el = document.getElementById("m");
+  el.textContent = mer;
+  el.removeAttribute("data-processed");
+  mermaid.initialize({ startOnLoad:false, theme:'default' });
+  mermaid.init(undefined, el);
 })();
 </script>
 </body>
