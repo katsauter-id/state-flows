@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>TX Minimal Flow</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  body{font-family:Tahoma,Arial,sans-serif;margin:16px;background:#fafafa}
+  pre{background:#f3f4f6;padding:12px;border-radius:8px;overflow:auto}
+  #chart svg{width:100% !important;height:auto !important}
+  .err{white-space:pre-wrap;color:#b00020}
+</style>
+</head>
+<body>
+<h1>TX Minimal Flow</h1>
+<div>Source: <span id="src"></span></div>
+<div id="chart">Loading…</div>
+<h3>Mermaid Source</h3>
+<pre id="mer"></pre>
+<div id="err" class="err"></div>
+
+<script>
+const qs = new URL(location.href).searchParams;
+const yamlUrl = qs.get('yaml') || './states/TX.yaml';
+document.getElementById('src').textContent = yamlUrl;
+
+function sanitizeLabel(txt){
+  return String(txt || '')
+    .replace(/\r?\n/g,' ')       // one line only
+    .replace(/<br\s*\/?>/gi,' ')
+    .replace(/\[/g,'(').replace(/\]/g,')')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .trim();
+}
+
+function buildMermaid(data){
+  // Minimal: no subgraphs, just nodes + edges
+  const L = [];
+  L.push('flowchart TB'); // vertical for readability
+
+  // Nodes
+  (data.steps || []).forEach(s=>{
+    const id = s.id;
+    const label = sanitizeLabel(s.label || s.id);
+    const node = s.type === 'decision' ? `${id}{${label}}` : `${id}[${label}]`;
+    L.push(`${node};`);
+  });
+
+  // Edges
+  (data.steps || []).forEach(s=>{
+    if (s.type === 'decision') {
+      if (s.yes_to) L.push(`${s.id} -- Yes --> ${s.yes_to};`);
+      if (s.no_to)  L.push(`${s.id} -- No --> ${s.no_to};`);
+    } else if (s.next) {
+      L.push(`${s.id} --> ${s.next};`);
+    }
+  });
+
+  return L.join('\n') + '\n';
+}
+
+(async function main(){
+  try{
+    const res = await fetch(yamlUrl, { cache:'no-store' });
+    if(!res.ok) throw new Error(`Fetch failed (${res.status}) for ${yamlUrl}`);
+    const raw = await res.text();
+    const data = jsyaml.load(raw);
+
+    const mer = buildMermaid(data);
+    document.getElementById('mer').textContent = mer;
+
+    mermaid.initialize({ startOnLoad:false, theme:'base', flowchart:{ htmlLabels:false, curve:'linear' } });
+    const { svg } = await mermaid.render('txmin', mer);
+    document.getElementById('chart').innerHTML = svg;
+
+  } catch(e){
+    document.getElementById('err').textContent = (e?.message || e);
+    document.getElementById('chart').textContent = '';
+  }
+})();
+</script>
+</body>
+</html>
