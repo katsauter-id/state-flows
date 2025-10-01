@@ -2,10 +2,9 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>State Filing Flow (diag)</title>
+  <title>State Filing Flow</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
-  <!-- Stable Mermaid -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
     body{font-family:Inter, Tahoma, Arial, sans-serif; margin:24px; background:#f5f6f8; color:#111827}
@@ -21,7 +20,6 @@
     #facts{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-top:20px}
     #facts h3{margin-top:0}
     #facts ul{margin:0;padding-left:20px;line-height:1.5}
-    .err{white-space:pre-wrap;color:#b00020;margin-top:8px}
   </style>
 </head>
 <body>
@@ -37,7 +35,6 @@
   </div>
 
   <div id="chart"><div id="m" class="mermaid">Loading…</div></div>
-  <div id="parseErr" class="err"></div>
 
   <h3 style="margin:16px 0 6px">Mermaid source</h3>
   <pre id="mer"></pre>
@@ -51,7 +48,7 @@
 <script>
 (async function(){
   const qs = new URL(location.href).searchParams;
-  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default
+  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";
   document.getElementById("src").textContent = yamlUrl;
 
   async function getYaml(url){
@@ -61,16 +58,11 @@
     return jsyaml.load(raw);
   }
 
-  // Normalize labels to avoid parser quirks
+  // Keep labels simple + dash style; avoid Mermaid parser gotchas
   const esc = t => String(t||"")
-    .replace(/\s*\(([^)]+)\)/g, " - $1") // (foo) ->  - foo
-    .replace(/\u2265/g, ">=")            // ≥ -> >=
-    .replace(/\u2264/g, "<=")            // ≤ -> <=
-    .replace(/[“”]/g, '"')               // smart quotes -> "
-    .replace(/[‘’]/g, "'")               // smart apostrophes -> '
-    .replace(/\u00A0/g, ' ')             // nbsp -> space
-    .replace(/\r?\n/g, " ")              // single line
-    .replace(/\[/g,"(").replace(/\]/g,")")
+    .replace(/\s*\(([^)]+)\)/g, " - $1")   // (foo) ->  - foo
+    .replace(/\r?\n/g, " ")                // single line
+    .replace(/\[/g,"(").replace(/\]/g,")") // brackets
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
     .trim();
 
@@ -98,13 +90,11 @@
       laneMap.state_portal = 'State Portal';
     }
 
-    const allLanes = Object.keys(laneMap);
-
     const L = [];
     L.push('flowchart TB');
 
     // lanes + nodes
-    for (const lane of allLanes){
+    for (const lane of Object.keys(laneMap)){
       const title = laneMap[lane] || lane;
       const laneSteps = steps.filter(s => s.lane === lane);
       if (!laneSteps.length) continue;
@@ -128,18 +118,14 @@
       }
     });
 
-    // styles (hex only) + rounded corners; no lane outlines
-    const lane1 = '#f8fafc', lane2 = '#f9fafb';
+    // styles: soft lane backgrounds (no outlines), rounded nodes
     L.push(
-      `style CONNECT fill:${lane1},stroke:transparent,stroke-width:0px`,
-      `style STATE_PORTAL fill:${lane2},stroke:transparent,stroke-width:0px`,
+      'style CONNECT fill:#f8fafc,stroke:transparent,stroke-width:0px',
+      'style STATE_PORTAL fill:#f9fafb,stroke:transparent,stroke-width:0px',
       'classDef action fill:#ffffff,stroke:#4f46e5,stroke-width:1.4px,color:#111827,rx:8,ry:8',
       'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827,rx:12,ry:12'
     );
-    (data.steps||[]).forEach(s => {
-      const cls = (s.type||'action') === 'decision' ? 'decision' : 'action';
-      L.push(`class ${s.id} ${cls}`);
-    });
+    steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
 
     return L.join("\n");
   }
@@ -152,16 +138,10 @@
       const mer = buildMermaid(data);
       document.getElementById("mer").textContent = mer;
 
-      // Parse first to catch errors clearly
-      const errBox = document.getElementById('parseErr');
-      errBox.textContent = '';
-      try { mermaid.mermaidAPI.parse(mer); }
-      catch(e){ errBox.textContent = 'Parser error:\n' + (e.str || e.message || e); return; }
-
-      // Render
       const el = document.getElementById("m");
       el.textContent = mer;
       el.removeAttribute("data-processed");
+
       mermaid.initialize({ startOnLoad:false, theme:'default', flowchart:{ curve:'linear', htmlLabels:false } });
       mermaid.init(undefined, el);
 
