@@ -45,10 +45,18 @@
         const laneId = lane.toUpperCase();
         lines.push(`  subgraph ${laneId}[${laneTitle(lane)}]`);
         for (const s of steps) {
-          const label = (s.label || s.id)
-            .replace(/\[/g,'(').replace(/\]/g,')')
-            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-            .replace(/\n/g,'\\\\n');   // <-- Mermaid newline
+       const label = (s.label || s.id)
+        // kill any kind of line break or <br/> so labels are ONE line
+        .replace(/<br\s*\/?>/gi, ' / ')
+        .replace(/\\n/g, ' / ')
+        .replace(/\r?\n/g, ' / ')
+        // escape stuff mermaid can trip on
+        .replace(/\[/g,'(')
+        .replace(/\]/g,')')
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;');
+
           const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
           lines.push(`    ${node}`);
         }
