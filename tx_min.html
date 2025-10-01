@@ -5,7 +5,7 @@
 <title>TX Minimal Flow</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10.8.0/dist/mermaid.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
   body{font-family:Tahoma,Arial,sans-serif;margin:16px;background:#fafafa}
   pre{background:#f3f4f6;padding:12px;border-radius:8px;overflow:auto}
@@ -45,7 +45,8 @@ function buildMermaid(data){
     const id = s.id;
     const label = sanitizeLabel(s.label || s.id);
     const node = s.type === 'decision' ? `${id}{${label}}` : `${id}[${label}]`;
-    L.push(`${node};`);
+    L.push(`${node}; %%`);
+    L.push('');
   });
 
   // Edges
@@ -54,7 +55,8 @@ function buildMermaid(data){
       if (s.yes_to) L.push(`${s.id} -- Yes --> ${s.yes_to};`);
       if (s.no_to)  L.push(`${s.id} -- No --> ${s.no_to};`);
     } else if (s.next) {
-      L.push(`${s.id} --> ${s.next};`);
+      L.push(`${s.id} --> ${s.next}; %%`);
+      L.push('');
     }
   });
 
