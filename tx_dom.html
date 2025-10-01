@@ -73,18 +73,19 @@ function buildMermaid(data){
     // show what we’re sending
     document.getElementById('merSrc').textContent = mer;
 
-    // feed Mermaid via DOM textContent (not render(string))
+    // feed Mermaid via DOM textContent
     const el = document.getElementById('m');
-    el.textContent = mer;            // <<< key: keep newlines verbatim
+    el.className = 'mermaid';
+    el.removeAttribute('data-processed'); // ensure it's picked up fresh
+    el.textContent = mer;
 
-    // init + run
+    // init + run (use init for max compatibility)
     mermaid.initialize({
       startOnLoad:false,
       theme:'base',
       flowchart:{ htmlLabels:false, curve:'linear' }
     });
-    await mermaid.run({ nodes: [el] }); // render that node
-
+    mermaid.init(undefined, el);
   } catch(e){
     document.getElementById('err').textContent = (e?.message || e);
     console.error(e);
