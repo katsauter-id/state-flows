@@ -139,12 +139,14 @@
     const lane1   = '#f8fafc';   // connect lane bg
     const lane2   = '#f9fafb';   // state lane bg
 
-    L.push(
-      `style CONNECT fill:${lane1},stroke:${stroke1},stroke-width:1.4px`,
-      `style STATE_PORTAL fill:${lane2},stroke:${stroke2},stroke-width:1.4px`,
-      'classDef action fill:#ffffff,stroke:#4f46e5,stroke-width:1.4px,color:#111827',
-      'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827'
-    );
+L.push(
+  `style CONNECT fill:${lane1},stroke:${stroke1},stroke-width:1.4px`,
+  `style STATE_PORTAL fill:${lane2},stroke:${stroke2},stroke-width:1.4px`,
+
+  // 👇 rounded corners added here
+  'classDef action fill:#ffffff,stroke:#4f46e5,stroke-width:1.4px,color:#111827,rx:8,ry:8',
+  'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827,rx:12,ry:12'
+);
     steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
 
     return L.join("\n");
