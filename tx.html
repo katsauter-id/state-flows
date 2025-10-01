@@ -67,9 +67,13 @@
         lines.push(`  subgraph ${laneId}[${laneTitle(lane)}]`);
         for (const s of steps) {
           const label = (s.label || s.id)
-            .replace(/\[/g,'(')
-            .replace(/\]/g,')')
-            .replace(/\n/g,'<br/>');  // ✅ convert \n to HTML breaks
+          .replace(/\[/g, '(')           // avoid bracket collisions
+          .replace(/\]/g, ')')
+          .replace(/&/g, '&amp;')        // escape HTML entities
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br/>');      // allow line breaks
+
           const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
           lines.push(`    ${node}`);
         }
