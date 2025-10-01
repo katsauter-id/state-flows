@@ -1,5 +1,5 @@
 state: "Texas"
-direction: TB   # Vertical reads better in Thinkific
+direction: TB
 lanes:
   - key: connect
   - key: state_portal
@@ -14,7 +14,7 @@ steps:
   - id: start_filing
     lane: connect
     type: action
-    label: "Start New Filing\n(select TX)"
+    label: "Start New Filing (select TX)"
     next: portal_login
 
   - id: portal_login
@@ -23,7 +23,6 @@ steps:
     label: "Log in to TX Portal"
     next: address_check
 
-  # ⤴️ Branching decision (demo-friendly)
   - id: address_check
     lane: state_portal
     type: decision
@@ -34,13 +33,13 @@ steps:
   - id: fix_address
     lane: connect
     type: action
-    label: "Fix address in Connect\n(update & save)"
+    label: "Fix address in Connect (update and save)"
     next: portal_login
 
   - id: upload_docs
     lane: state_portal
     type: action
-    label: "Upload Required Docs\n(package, attachments)"
+    label: "Upload Required Docs (package, attachments)"
     next: submit_filing
 
   - id: submit_filing
@@ -49,7 +48,6 @@ steps:
     label: "Submit Filing"
     next: receipt_check
 
-  # Small second branch to show verification/audit
   - id: receipt_check
     lane: state_portal
     type: decision
@@ -60,10 +58,10 @@ steps:
   - id: retry_download
     lane: state_portal
     type: action
-    label: "Retry download\n(or open in new tab)"
+    label: "Retry download (or open in new tab)"
     next: receipt_check
 
   - id: archive_receipt
     lane: connect
     type: action
-    label: "Archive receipt in Connect\n(link to record)"
+    label: "Archive receipt in Connect (link to record)"
