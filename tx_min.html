@@ -2,24 +2,37 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>TX Minimal Flow</title>
+<title>TX Minimal Flow (Hard Separators)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<!-- Pin to 10.8.0 -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.8.0/dist/mermaid.min.js"></script>
 <style>
   body{font-family:Tahoma,Arial,sans-serif;margin:16px;background:#fafafa}
   pre{background:#f3f4f6;padding:12px;border-radius:8px;overflow:auto}
   #chart svg{width:100% !important;height:auto !important}
   .err{white-space:pre-wrap;color:#b00020}
+  .row{display:flex;gap:16px;flex-wrap:wrap}
+  .col{flex:1 1 520px;min-width:320px}
+  .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px}
 </style>
 </head>
 <body>
-<h1>TX Minimal Flow</h1>
+<h1>TX Minimal Flow (Hard Separators)</h1>
 <div>Source: <span id="src"></span></div>
-<div id="chart">Loading…</div>
-<h3>Mermaid Source</h3>
-<pre id="mer"></pre>
-<div id="err" class="err"></div>
+<div class="row" style="margin-top:12px">
+  <div class="col card">
+    <h3>Mermaid Source</h3>
+    <pre id="mer"></pre>
+    <h4>JSON-escaped (debug)</h4>
+    <pre id="merJson"></pre>
+  </div>
+  <div class="col card">
+    <h3>Chart</h3>
+    <div id="chart">Loading…</div>
+    <div id="err" class="err"></div>
+  </div>
+</div>
 
 <script>
 const qs = new URL(location.href).searchParams;
@@ -28,7 +41,7 @@ document.getElementById('src').textContent = yamlUrl;
 
 function sanitizeLabel(txt){
   return String(txt || '')
-    .replace(/\r?\n/g,' ')       // one line only
+    .replace(/\r?\n/g,' ')       // single line labels for now
     .replace(/<br\s*\/?>/gi,' ')
     .replace(/\[/g,'(').replace(/\]/g,')')
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -36,30 +49,33 @@ function sanitizeLabel(txt){
 }
 
 function buildMermaid(data){
-  // Minimal: no subgraphs, just nodes + edges
   const L = [];
-  L.push('flowchart TB'); // vertical for readability
+  L.push('flowchart TB');
+  L.push('%% START');                     // hard separator line
 
-  // Nodes
+  // nodes
   (data.steps || []).forEach(s=>{
     const id = s.id;
     const label = sanitizeLabel(s.label || s.id);
     const node = s.type === 'decision' ? `${id}{${label}}` : `${id}[${label}]`;
-    L.push(`${node}; %%`);
-    L.push('');
+    L.push(`${node};`);
+    L.push('%% SEP');                    // standalone comment line = separator
   });
 
-  // Edges
+  L.push('%% EDGES');
+
+  // edges
   (data.steps || []).forEach(s=>{
     if (s.type === 'decision') {
-      if (s.yes_to) L.push(`${s.id} -- Yes --> ${s.yes_to};`);
-      if (s.no_to)  L.push(`${s.id} -- No --> ${s.no_to};`);
+      if (s.yes_to) { L.push(`${s.id} -- Yes --> ${s.yes_to};`); L.push('%% SEP'); }
+      if (s.no_to)  { L.push(`${s.id} -- No --> ${s.no_to};`);  L.push('%% SEP'); }
     } else if (s.next) {
-      L.push(`${s.id} --> ${s.next}; %%`);
-      L.push('');
+      L.push(`${s.id} --> ${s.next};`);
+      L.push('%% SEP');
     }
   });
 
+  // join with hard newlines
   return L.join('\n') + '\n';
 }
 
@@ -71,15 +87,19 @@ function buildMermaid(data){
     const data = jsyaml.load(raw);
 
     const mer = buildMermaid(data);
+
+    // show sources
     document.getElementById('mer').textContent = mer;
+    document.getElementById('merJson').textContent = JSON.stringify(mer);
 
     mermaid.initialize({ startOnLoad:false, theme:'base', flowchart:{ htmlLabels:false, curve:'linear' } });
-    const { svg } = await mermaid.render('txmin', mer);
+    const { svg } = await mermaid.render('txmin_sep', mer);
     document.getElementById('chart').innerHTML = svg;
 
   } catch(e){
     document.getElementById('err').textContent = (e?.message || e);
     document.getElementById('chart').textContent = '';
+    console.error(e);
   }
 })();
 </script>
