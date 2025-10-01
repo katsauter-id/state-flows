@@ -2,25 +2,29 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>TX Flow (DOM-fed)</title>
+<title>TX Flow (DOM-fed, Mermaid 9.4.3)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- YAML + Mermaid (pinned to stable 9.4.3) -->
 <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
-<!-- Pin to a stable Mermaid -->
 <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
+
 <style>
-  body{font-family:Tahoma,Arial,sans-serif;margin:16px;background:#fafafa}
-  #chart .mermaid{white-space:pre; } /* keep newlines exactly */
+  body{font-family:Tahoma,Arial,sans-serif;margin:16px;background:#fafafa;color:#111}
+  #chart .mermaid{white-space:pre;} /* preserve newlines exactly */
   .err{white-space:pre-wrap;color:#b00020;margin-top:12px}
   pre{background:#f3f4f6;padding:12px;border-radius:8px;overflow:auto}
 </style>
 </head>
 <body>
-<h1>TX Flow (DOM-fed)</h1>
+<h1>TX Flow (DOM-fed, Mermaid 9.4.3)</h1>
 <div>Source: <span id="src"></span></div>
 
 <div id="chart"><div id="m" class="mermaid">Loading…</div></div>
+
 <h3>Mermaid Source</h3>
 <pre id="merSrc"></pre>
+
 <div id="err" class="err"></div>
 
 <script>
@@ -28,7 +32,7 @@ const qs = new URL(location.href).searchParams;
 const yamlUrl = qs.get('yaml') || './states/TX.yaml';
 document.getElementById('src').textContent = yamlUrl;
 
-// simple one-line labels
+// one-line labels for stability; we can add multi-line later
 function sanitizeLabel(txt){
   return String(txt || '')
     .replace(/\r?\n/g,' ')
@@ -40,14 +44,14 @@ function sanitizeLabel(txt){
 
 function buildMermaid(data){
   const L = [];
-  L.push('flowchart TB');
-  // nodes — one per line
+  L.push('flowchart TB'); // vertical layout
+  // nodes (each on its own line, with semicolon)
   (data.steps || []).forEach(s=>{
     const label = sanitizeLabel(s.label || s.id);
     const node  = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
     L.push(node + ';');
   });
-  // edges — one per line
+  // edges
   (data.steps || []).forEach(s=>{
     if (s.type === 'decision') {
       if (s.yes_to) L.push(`${s.id} -- Yes --> ${s.yes_to};`);
@@ -56,33 +60,28 @@ function buildMermaid(data){
       L.push(`${s.id} --> ${s.next};`);
     }
   });
-  return L.join('\n'); // hard newlines
+  return L.join('\n');
 }
 
 (async function main(){
   try{
-    // fetch YAML
     const res = await fetch(yamlUrl, { cache:'no-store' });
     if(!res.ok) throw new Error(`Fetch failed (${res.status}) for ${yamlUrl}`);
     const raw = await res.text();
     const data = jsyaml.load(raw);
 
-    // build mermaid text
     const mer = buildMermaid(data);
-
-    // show what we’re sending
     document.getElementById('merSrc').textContent = mer;
 
-    // feed Mermaid via DOM textContent
+    // Reset target element and feed graph text directly
     const el = document.getElementById('m');
     el.className = 'mermaid';
-    el.removeAttribute('data-processed'); // ensure it's picked up fresh
+    el.removeAttribute('data-processed');
     el.textContent = mer;
 
-    // init + run (use init for max compatibility)
-  mermaid.initialize({ startOnLoad:false, theme:'base', flowchart:{ htmlLabels:false, curve:'linear' } });
-const { svg } = await mermaid.render('txsvg', mer); // uses the mer string we built
-document.getElementById('m').outerHTML = svg; // swap the node with SVG
+    // Init + render with Mermaid 9.x
+    mermaid.initialize({ startOnLoad:false, theme:'default' });
+    mermaid.init(undefined, el);
 
   } catch(e){
     document.getElementById('err').textContent = (e?.message || e);
