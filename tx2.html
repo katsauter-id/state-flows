@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>State Filing Flow v13</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root { --ink:#373f51; --muted:#616161; --border:#e5e7eb; --card:#fff; }
+    html,body{margin:0;padding:0}
+    body{font-family: Tahoma, Arial, sans-serif; color:var(--ink); background:#fafafa}
+    .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
+    h1{font-size:1.25rem;margin:0 0 12px;font-weight:700}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;white-space:pre-wrap}
+    #chart svg{width:100% !important;height:auto !important}
+    .foot{margin-top:8px;color:var(--muted);font-size:.85rem}
+    .error{color:#b00020;white-space:pre-wrap}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 id="title">Filing Flow (v13)</h1>
+    <div id="chart" class="card">Loading…</div>
+    <div class="foot">Source: <span id="src"></span></div>
+  </div>
+
+  <script>
+    // Params
+    const qs = new URL(location.href).searchParams;
+    const yamlUrl = qs.get('yaml') || './states/TX.yaml';
+
+    function toTitle(data){ return `${data?.state || 'State'} Filing Flow`; }
+
+    // YAML -> Mermaid (NO HTML breaks; Mermaid-native \n)
+    function toMermaid(data) {
+      const byLane = {};
+      (data.steps || []).forEach(s => { (byLane[s.lane || 'default'] ||= []).push(s); });
+
+      const laneTitle = k => ({ connect:"InsCipher Connect", state_portal:"State Portal" }[k] || k);
+      const dir = data.direction || 'LR';
+      const lines = [`flowchart ${dir}`];
+
+      for (const [lane, steps] of Object.entries(byLane)) {
+        const laneId = lane.toUpperCase();
+        lines.push(`  subgraph ${laneId}[${laneTitle(lane)}]`);
+        for (const s of steps) {
+          const label = (s.label || s.id)
+            .replace(/\[/g,'(').replace(/\]/g,')')
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/\n/g,'\\\\n');   // <-- Mermaid newline
+          const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
+          lines.push(`    ${node}`);
+        }
+        lines.push('  end');
+      }
+
+      for (const s of (data.steps || [])) {
+        if (s.type === 'decision') {
+          if (s.yes_to) lines.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
+          if (s.no_to)  lines.push(`  ${s.id} -- No --> ${s.no_to}`);
+        } else if (s.next) {
+          lines.push(`  ${s.id} --> ${s.next}`);
+        }
+      }
+
+      lines.push(
+        'style CONNECT fill:#f8f9fa,stroke:#4f46e5,stroke-width:1.5px',
+        'style STATE_PORTAL fill:#f8f9fa,stroke:#468c98,stroke-width:1.5px',
+        'classDef action   fill:#ffffff,stroke:#4f46e5,stroke-width:1.5px,color:#373f51',
+        'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#373f51',
+        'linkStyle default stroke:#616161,stroke-width:1.5px,opacity:0.9'
+      );
+      (data.steps || []).forEach(s => lines.push(`class ${s.id} ${s.type === 'decision' ? 'decision':'action'}`));
+      return lines.join('\n');
+    }
+
+    async function main(){
+      try{
+        document.getElementById('src').textContent = yamlUrl;
+
+        const res = await fetch(yamlUrl, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`Fetch failed (${res.status}) for ${yamlUrl}`);
+        const raw = await res.text();
+        const data = jsyaml.load(raw);
+
+        document.title = toTitle(data);
+        document.getElementById('title').textContent = toTitle(data);
+
+        // Mermaid init (NO htmlLabels)
+        mermaid.initialize({
+          startOnLoad:false, theme:"base",
+          flowchart:{ useMaxWidth:true, curve:"linear", padding:12, htmlLabels:false },
+          themeVariables:{
+            fontFamily:'Tahoma, Arial, sans-serif',
+            primaryColor:'#ffffff', primaryTextColor:'#373f51',
+            primaryBorderColor:'#4f46e5', lineColor:'#616161', tertiaryColor:'#f04f23'
+          }
+        });
+
+        const mer = toMermaid(data);
+        const { svg } = await mermaid.render('diagram', mer);
+        document.getElementById('chart').innerHTML = svg;
+      } catch(err){
+        const c = document.getElementById('chart');
+        c.className = 'card error';
+        c.textContent = 'Error loading diagram:\n' + err.message + '\n\nSource: ' + yamlUrl;
+        console.error(err);
+      }
+    }
+    main();
+  </script>
+</body>
+</html>
