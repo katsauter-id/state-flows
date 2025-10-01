@@ -60,7 +60,7 @@
             .replace(/&/g,'&amp;')        // escape entities
             .replace(/</g,'&lt;')
             .replace(/>/g,'&gt;')
-            .replace(/\n/g,'<br/>');      // allow line breaks
+            .replace(/\n/g,'\\\\n');      // allow line breaks
           const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
           lines.push(`    ${node}`);
         }
@@ -118,7 +118,7 @@
         mermaid.initialize({
           startOnLoad: false,
           theme: "base",
-          flowchart: { useMaxWidth:true, curve:"linear", padding:12, htmlLabels:true },
+          flowchart: { useMaxWidth:true, curve:"linear", padding:12, htmlLabels:false },
           themeVariables: {
             fontFamily: 'Tahoma, Arial, sans-serif',
             primaryColor: '#ffffff',
