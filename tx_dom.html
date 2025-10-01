@@ -2,37 +2,46 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>TX Flow (DOM-fed, Mermaid 9.4.3)</title>
+<title>TX Flow (DOM-fed, diag)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<!-- YAML + Mermaid (pinned to stable 9.4.3) -->
+<!-- Stable versions -->
 <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
 
 <style>
   body{font-family:Tahoma,Arial,sans-serif;margin:16px;background:#fafafa;color:#111}
-  #chart .mermaid{white-space:pre;} /* preserve newlines exactly */
+  #chart .mermaid{white-space:pre;} /* preserve newlines */
   .err{white-space:pre-wrap;color:#b00020;margin-top:12px}
   pre{background:#f3f4f6;padding:12px;border-radius:8px;overflow:auto}
+  .row{display:flex;gap:16px;flex-wrap:wrap}
+  .col{flex:1 1 520px;min-width:320px}
+  .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px}
 </style>
 </head>
 <body>
-<h1>TX Flow (DOM-fed, Mermaid 9.4.3)</h1>
+<h1>TX Flow (DOM-fed, diagnostic)</h1>
 <div>Source: <span id="src"></span></div>
 
-<div id="chart"><div id="m" class="mermaid">Loading…</div></div>
-
-<h3>Mermaid Source</h3>
-<pre id="merSrc"></pre>
-
-<div id="err" class="err"></div>
+<div class="row" style="margin-top:12px">
+  <div class="col card">
+    <h3>Mermaid Source (with semicolons)</h3>
+    <pre id="merWith"></pre>
+    <h3>Mermaid Source (without semicolons)</h3>
+    <pre id="merNo"></pre>
+  </div>
+  <div class="col card">
+    <h3>Chart</h3>
+    <div id="chart"><div id="m" class="mermaid">Loading…</div></div>
+    <div id="err" class="err"></div>
+  </div>
+</div>
 
 <script>
 const qs = new URL(location.href).searchParams;
 const yamlUrl = qs.get('yaml') || './states/TX.yaml';
 document.getElementById('src').textContent = yamlUrl;
 
-// one-line labels for stability; we can add multi-line later
 function sanitizeLabel(txt){
   return String(txt || '')
     .replace(/\r?\n/g,' ')
@@ -41,26 +50,37 @@ function sanitizeLabel(txt){
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .trim();
 }
-
-function buildMermaid(data){
+function build(data, withSemicolons=true){
   const L = [];
-  L.push('flowchart TB'); // vertical layout
-  // nodes (each on its own line, with semicolon)
+  L.push('flowchart TB'); // vertical
+  // nodes
   (data.steps || []).forEach(s=>{
     const label = sanitizeLabel(s.label || s.id);
     const node  = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
-    L.push(node + ';');
+    L.push(withSemicolons ? node+';' : node);
   });
   // edges
   (data.steps || []).forEach(s=>{
     if (s.type === 'decision') {
-      if (s.yes_to) L.push(`${s.id} -- Yes --> ${s.yes_to};`);
-      if (s.no_to)  L.push(`${s.id} -- No --> ${s.no_to};`);
+      if (s.yes_to) L.push(withSemicolons ? `${s.id} -- Yes --> ${s.yes_to};` : `${s.id} -- Yes --> ${s.yes_to}`);
+      if (s.no_to)  L.push(withSemicolons ? `${s.id} -- No --> ${s.no_to};`  : `${s.id} -- No --> ${s.no_to}`);
     } else if (s.next) {
-      L.push(`${s.id} --> ${s.next};`);
+      L.push(withSemicolons ? `${s.id} --> ${s.next};` : `${s.id} --> ${s.next}`);
     }
   });
   return L.join('\n');
+}
+
+async function renderDOM(mer){
+  const el = document.getElementById('m');
+  el.className = 'mermaid';
+  el.removeAttribute('data-processed');
+  el.textContent = mer;
+  mermaid.init(undefined, el);
+}
+async function renderString(mer){
+  const { svg } = await mermaid.render('txsvg', mer);
+  document.getElementById('chart').innerHTML = svg;
 }
 
 (async function main(){
@@ -70,18 +90,44 @@ function buildMermaid(data){
     const raw = await res.text();
     const data = jsyaml.load(raw);
 
-    const mer = buildMermaid(data);
-    document.getElementById('merSrc').textContent = mer;
+    // Build both variants
+    const merWith = build(data, true);
+    const merNo   = build(data, false);
+    document.getElementById('merWith').textContent = merWith;
+    document.getElementById('merNo').textContent   = merNo;
 
-    // Reset target element and feed graph text directly
-    const el = document.getElementById('m');
-    el.className = 'mermaid';
-    el.removeAttribute('data-processed');
-    el.textContent = mer;
+    // Init mermaid 9.x
+    mermaid.initialize({ startOnLoad:false, theme:'default', flowchart:{ htmlLabels:false, curve:'linear' } });
 
-    // Init + render with Mermaid 9.x
-    mermaid.initialize({ startOnLoad:false, theme:'default' });
-    mermaid.init(undefined, el);
+    // 1) Validate with parser (gives real error)
+    try {
+      mermaid.mermaidAPI.parse(merWith);
+    } catch (e1) {
+      // Show parse error for withSemicolons
+      document.getElementById('err').textContent = 'Parser error (with semicolons):\n' + (e1.str || e1.message || e1);
+      // Try the no-semicolon version
+      try {
+        mermaid.mermaidAPI.parse(merNo);
+      } catch (e2) {
+        document.getElementById('err').textContent += '\n\nParser error (no semicolons):\n' + (e2.str || e2.message || e2);
+        // As a last sanity check: render a trivial static graph so we know Mermaid works
+        const trivial = 'flowchart TB\nA[OK];\nB[It works];\nA-->B';
+        const { svg } = await mermaid.render('trivial', trivial);
+        document.getElementById('chart').innerHTML = svg;
+        return;
+      }
+      // No-semicolon parsed; render that
+      await renderString(merNo);
+      return;
+    }
+
+    // 2) If parse OK, render (try DOM then string)
+    try {
+      await renderDOM(merWith);
+    } catch (eDOM) {
+      // fallback to string render
+      await renderString(merWith);
+    }
 
   } catch(e){
     document.getElementById('err').textContent = (e?.message || e);
