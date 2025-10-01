@@ -58,17 +58,17 @@
         .replace(/>/g,'&gt;');
 
           const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
-          lines.push(`    ${node}`);
+          lines.push(`    ${node}`););
         }
         lines.push('  end');
       }
 
       for (const s of (data.steps || [])) {
         if (s.type === 'decision') {
-          if (s.yes_to) lines.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
-          if (s.no_to)  lines.push(`  ${s.id} -- No --> ${s.no_to}`);
+          if (s.yes_to) lines.push(`  ${s.id} -- Yes --> ${s.yes_to};`);
+          if (s.no_to)  lines.push(`  ${s.id} -- No --> ${s.no_to};`);
         } else if (s.next) {
-          lines.push(`  ${s.id} --> ${s.next}`);
+          lines.push(`  ${s.id} --> ${s.next};`);
         }
       }
 
