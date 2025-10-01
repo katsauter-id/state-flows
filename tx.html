@@ -17,7 +17,7 @@
     #chart svg{width:100% !important;height:auto !important}
     .foot{margin-top:8px;color:var(--muted);font-size:.85rem}
     .error{color:#b00020;white-space:pre-wrap}
-    a{color:#373f51;text-decoration:none}
+    a{color:#4f46e5;text-decoration:none}
   </style>
 </head>
 <body>
@@ -28,7 +28,7 @@
   </div>
 
   <script>
-    // --- Mermaid init with InsCipher brand + straight arrows ---
+    // --- Mermaid init ---
     mermaid.initialize({
       startOnLoad: false,
       theme: "base",
@@ -37,13 +37,12 @@
         fontFamily: 'Tahoma, Arial, sans-serif',
         primaryColor: '#ffffff',
         primaryTextColor: '#373f51',
-        primaryBorderColor: '#ffffff',
+        primaryBorderColor: '#4f46e5', // muted indigo
         lineColor: '#616161',
         tertiaryColor: '#f04f23'
       }
     });
 
-    // --- Helpers ---
     const qs = new URL(location.href).searchParams;
     const yamlUrl = qs.get('yaml') || './states/TX.yaml';
 
@@ -52,7 +51,7 @@
       return `${st} Filing Flow`;
     }
 
-    // YAML -> Mermaid with lanes, edges, and brand styling
+    // YAML -> Mermaid
     function toMermaid(data) {
       const byLane = {};
       (data.steps || []).forEach(s => {
@@ -60,22 +59,23 @@
         (byLane[lane] ||= []).push(s);
       });
       const laneTitle = k => ({ connect:"InsCipher Connect", state_portal:"State Portal" }[k] || k);
-      const dir = data.direction || 'LR'; // set TB in YAML for vertical
+      const dir = data.direction || 'LR';
       const lines = [`flowchart ${dir}`];
 
-      // Lanes & nodes
       for (const [lane, steps] of Object.entries(byLane)) {
         const laneId = lane.toUpperCase();
         lines.push(`  subgraph ${laneId}[${laneTitle(lane)}]`);
         for (const s of steps) {
-          const label = (s.label || s.id).replace(/\[/g,'(').replace(/\]/g,')');
+          const label = (s.label || s.id)
+            .replace(/\[/g,'(')
+            .replace(/\]/g,')')
+            .replace(/\n/g,'<br/>');  // ✅ convert \n to HTML breaks
           const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
           lines.push(`    ${node}`);
         }
         lines.push('  end');
       }
 
-      // Edges
       for (const s of (data.steps || [])) {
         if (s.type === 'decision') {
           if (s.yes_to) lines.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
@@ -85,17 +85,13 @@
         }
       }
 
-      // === Neutral lane styling + branded nodes ===
       lines.push(
-        'style CONNECT fill:#f8f9fa,stroke:#ffffff,stroke-width:1.5px',
-        'style STATE_PORTAL fill:#f8f9fa,stroke:#ffffff,stroke-width:1.5px',
-
-        'classDef action   fill:#ffffff,stroke:#ffffff,stroke-width:1.5px,color:#373f51,font-family:Tahoma',
-        'classDef decision fill:#fff7ed,stroke:#ffffff,stroke-width:2px,color:#373f51,font-family:Tahoma',
-
+        'style CONNECT fill:#f8f9fa,stroke:#4f46e5,stroke-width:1.5px',
+        'style STATE_PORTAL fill:#f8f9fa,stroke:#468c98,stroke-width:1.5px',
+        'classDef action   fill:#ffffff,stroke:#4f46e5,stroke-width:1.5px,color:#373f51,font-family:Tahoma',
+        'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#373f51,font-family:Tahoma',
         'linkStyle default stroke:#616161,stroke-width:1.5px,opacity:0.9'
       );
-
       (data.steps || []).forEach(s => {
         const cls = s.type === 'decision' ? 'decision' : 'action';
         lines.push(`class ${s.id} ${cls}`);
@@ -109,7 +105,6 @@
       const res = await fetch(yamlUrl, { cache: 'no-store' });
       if(!res.ok) throw new Error(`Fetch failed (${res.status}) for ${yamlUrl}`);
       const raw = await res.text();
-
       let data;
       try { data = jsyaml.load(raw); }
       catch(e){ throw new Error('YAML parse error: ' + e.message); }
@@ -125,7 +120,7 @@
     main().catch(err=>{
       const c = document.getElementById('chart');
       c.className = 'card error';
-      c.textContent = 'Error loading diagram:\n' + err.message + '\n\nCheck your YAML path & syntax.';
+      c.textContent = 'Error loading diagram:\n' + err.message;
     });
   </script>
 </body>
