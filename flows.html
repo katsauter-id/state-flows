@@ -8,37 +8,62 @@
   <style>
     body { font-family: Tahoma, Arial, sans-serif; margin: 16px; background: #fafafa }
     #chart .mermaid { white-space: pre }
-    pre { background: #f6f6f6; padding: 10px; border-radius: 8px }
+    pre { background: #f6f6f6; padding: 10px; border-radius: 8px; overflow:auto }
   </style>
 </head>
 <body>
 <h1 id="title">State Flow</h1>
 <div>Source: <span id="src"></span></div>
-<div id="chart"><div id="m" class="mermaid">flowchart TB
-    open_connect[Open InsCipher Connect]
-    start_filing[Start New Filing - select TX]
-    portal_login[Log in to TX Portal]
-    address_check{Address mismatch?}
-    fix_address[Fix address in Connect - update and save]
-    upload_docs[Upload Required Docs - package, attachments]
-    submit_filing[Submit Filing]
-    receipt_check{Receipt downloaded?}
-    retry_download[Retry download - or open in new tab]
-    archive_receipt[Archive receipt in Connect - link to record]
-    open_connect --> start_filing
-    start_filing --> portal_login
-    portal_login --> address_check
-    address_check -- Yes --> fix_address
-    address_check -- No --> upload_docs
-    fix_address --> portal_login
-    upload_docs --> submit_filing
-    submit_filing --> receipt_check
-    receipt_check -- Yes --> archive_receipt
-    receipt_check -- No --> retry_download
-    retry_download --> receipt_check
-</div>
+<div id="chart"><div id="m" class="mermaid">Loading…</div></div>
+<h3>Mermaid source</h3>
+<pre id="mer"></pre>
+
 <script>
-  mermaid.initialize({ startOnLoad:true, theme:'default' });
+(async function(){
+  const qs = new URL(location.href).searchParams;
+  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default to TX.yaml
+  document.getElementById("src").textContent = yamlUrl;
+
+  // Fetch + parse YAML
+  const res = await fetch(yamlUrl, { cache: "no-store" });
+  if(!res.ok){ document.getElementById("chart").textContent = "Fetch failed " + res.status; return; }
+  const raw  = await res.text();
+  const data = jsyaml.load(raw);
+
+  // Label sanitizer -> EXACT “dash style” that rendered
+  const esc = t => String(t||"")
+    .replace(/\s*\(([^)]+)\)/g, " - $1")  // (foo) ->  - foo
+    .replace(/\r?\n/g, " ")               // single line
+    .replace(/\[/g,"(").replace(/\]/g,")")// avoid bracket collisions
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .trim();
+
+  // Build Mermaid from YAML
+  const L = ["flowchart TB"];
+  (data.steps||[]).forEach(s=>{
+    const label = esc(s.label || s.id);
+    const node  = s.type==="decision" ? `${s.id}{${label}}` : `${s.id}[${label}]`;
+    L.push("    " + node);
+  });
+  (data.steps||[]).forEach(s=>{
+    if(s.type==="decision"){
+      if(s.yes_to) L.push(`    ${s.id} -- Yes --> ${s.yes_to}`);
+      if(s.no_to)  L.push(`    ${s.id} -- No --> ${s.no_to}`);
+    } else if(s.next){
+      L.push(`    ${s.id} --> ${s.next}`);
+    }
+  });
+
+  const mer = L.join("\n");
+  document.getElementById("mer").textContent = mer;
+
+  // Render (DOM-fed)
+  const el = document.getElementById("m");
+  el.textContent = mer;
+  el.removeAttribute("data-processed");
+  mermaid.initialize({ startOnLoad:false, theme:'default' });
+  mermaid.init(undefined, el);
+})();
 </script>
 </body>
 </html>
