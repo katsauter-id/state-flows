@@ -4,30 +4,22 @@
   <meta charset="utf-8" />
   <title>State Filing Flow</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Stable libs -->
   <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
-    :root{
-      --ink:#111827; --muted:#6b7280;
-      --lane1:#f8fafc; --lane2:#f9fafb; /* only for legend & page styling */
-      --border:#e5e7eb; --card:#ffffff;
-    }
-    *{box-sizing:border-box}
-    body{font-family: Inter, Tahoma, Arial, sans-serif; margin:24px; background:#f5f6f8; color:var(--ink)}
+    body{font-family: Inter, Tahoma, Arial, sans-serif; margin:24px; background:#f5f6f8; color:#111827}
     .wrap{max-width:1100px;margin:0 auto}
-    h1{margin:0 0 8px;font-size:24px;font-weight:800;letter-spacing:.2px}
-    .sub{color:var(--muted);margin-bottom:16px}
-    .bar{display:flex;gap:8px;align-items:center;margin:8px 0 16px}
-    .btn{border:1px solid var(--border);background:var(--card);padding:8px 12px;border-radius:10px;cursor:pointer}
+    h1{margin:0 0 8px;font-size:24px;font-weight:800}
+    .sub{color:#6b7280;margin-bottom:16px}
+    .bar{display:flex;gap:8px;align-items:center;margin:12px 0}
+    .btn{border:1px solid #e5e7eb;background:#fff;padding:8px 12px;border-radius:10px;cursor:pointer;text-decoration:none;color:#111827}
     .btn:hover{background:#f9fafb}
-    #chart{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
+    #chart{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px}
     #chart svg{width:100% !important;height:auto !important}
-    pre{background:#f9fafb;border:1px solid var(--border);border-radius:12px;padding:12px;overflow:auto;margin-top:12px}
-    .legend{display:flex;gap:12px;align-items:center;margin:6px 0 14px;font-size:13px;color:var(--muted)}
-    .dot{width:10px;height:10px;border-radius:999px;display:inline-block;margin-right:6px;border:1px solid var(--border)}
-    .lane1{background:var(--lane1)}
-    .lane2{background:var(--lane2)}
+    pre{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:12px;overflow:auto;margin-top:12px}
+    #facts{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-top:20px}
+    #facts h3{margin-top:0}
+    #facts ul{margin:0;padding-left:20px;line-height:1.5}
   </style>
 </head>
 <body>
@@ -35,36 +27,30 @@
   <h1 id="title">State Filing Flow</h1>
   <div class="sub">Source: <span id="src"></span></div>
 
-  <div class="legend">
-    <span><span class="dot lane1"></span>InsCipher Connect</span>
-    <span><span class="dot lane2"></span>State Portal</span>
-  </div>
-
   <div class="bar">
+    <a href="https://connect.inscipher.com" target="_blank" class="btn">File via Connect</a>
+    <a href="https://www.sltx.org/filings/" target="_blank" class="btn">File via TX Portal</a>
     <button id="btnRefresh" class="btn">Refresh</button>
     <button id="btnDownload" class="btn">Download SVG</button>
   </div>
-  <div style="margin:12px 0">
-  <a href="https://www.sltx.org/filings/" target="_blank" 
-     style="color:#4f46e5; font-weight:600; text-decoration:none">
-    ➜ Open Texas Filing Website
-  </a>
-</div>
-
 
   <div id="chart"><div id="m" class="mermaid">Loading…</div></div>
 
   <h3 style="margin:16px 0 6px">Mermaid source</h3>
   <pre id="mer"></pre>
+
+  <div id="facts">
+    <h3>Quick Facts</h3>
+    <ul id="factsList"></ul>
+  </div>
 </div>
 
 <script>
 (async function(){
   const qs = new URL(location.href).searchParams;
-  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // ✅ default if no param
+  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default
   document.getElementById("src").textContent = yamlUrl;
 
-  // Fetch + parse YAML
   async function getYaml(url){
     const res = await fetch(url, { cache: "no-store" });
     if(!res.ok) throw new Error("Fetch failed " + res.status + " for " + url);
@@ -72,22 +58,19 @@
     return jsyaml.load(raw);
   }
 
-  // Label sanitizer -> “dash style” that we know renders
   const esc = t => String(t||"")
-    .replace(/\s*\(([^)]+)\)/g, " - $1")  // (foo) ->  - foo
-    .replace(/\r?\n/g, " ")               // keep single line
-    .replace(/\[/g,"(").replace(/\]/g,")")// avoid bracket collisions
+    .replace(/\s*\(([^)]+)\)/g, " - $1")
+    .replace(/\r?\n/g, " ")
+    .replace(/\[/g,"(").replace(/\]/g,")")
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
     .trim();
 
   function inferLane(id){
-    // Fallback so older YAMLs still render in lanes
     if (/^(open_connect|start_filing|fix_address|archive_receipt)/.test(id)) return 'connect';
     return 'state_portal';
   }
 
   function buildMermaid(data){
-    // Normalize steps + lanes
     const steps = (data.steps || []).map(s => ({
       id: s.id,
       type: s.type || 'action',
@@ -98,7 +81,6 @@
       lane: s.lane || s.lane_key || inferLane(s.id)
     }));
 
-    // Lane titles (use YAML lanes if provided; else defaults)
     const laneMap = {};
     if (Array.isArray(data.lanes) && data.lanes.length){
       data.lanes.forEach(l => laneMap[l.key] = l.title || l.name || l.key);
@@ -107,19 +89,15 @@
       laneMap.state_portal = 'State Portal';
     }
 
-    const lanesInOrder = Object.keys(laneMap);
-    const extraLanes = [...new Set(steps.map(s=>s.lane))].filter(k => !lanesInOrder.includes(k));
-    const allLanes = [...lanesInOrder, ...extraLanes];
+    const allLanes = Object.keys(laneMap);
 
     const L = [];
-    L.push('flowchart TB'); // vertical, reads better
+    L.push('flowchart TB');
 
-    // Lanes + nodes
     for (const lane of allLanes){
       const title = laneMap[lane] || lane;
       const laneSteps = steps.filter(s => s.lane === lane);
       if (!laneSteps.length) continue;
-
       const laneId = lane.toUpperCase();
       L.push(`  subgraph ${laneId}[${title}]`);
       laneSteps.forEach(s => {
@@ -130,7 +108,6 @@
       L.push('');
     }
 
-    // Edges
     steps.forEach(s=>{
       if (s.type === 'decision') {
         if (s.yes_to) L.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
@@ -140,18 +117,17 @@
       }
     });
 
-    // Mermaid styles MUST use hex values (no CSS vars here)
-    const stroke1 = '#4f46e5';   // indigo
-    const stroke2 = '#468c98';   // teal
-    const lane1   = '#f8fafc';   // connect lane bg
-    const lane2   = '#f9fafb';   // state lane bg
+    const stroke1 = '#4f46e5';
+    const stroke2 = '#468c98';
+    const lane1   = '#f8fafc';
+    const lane2   = '#f9fafb';
 
-L.push(
-  `style CONNECT fill:${lane1},stroke:transparent,stroke-width:0px`,
-  `style STATE_PORTAL fill:${lane2},stroke:transparent,stroke-width:0px`,
-  'classDef action fill:#ffffff,stroke:#4f46e5,stroke-width:1.4px,color:#111827,rx:8,ry:8',
-  'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827,rx:12,ry:12'
-);
+    L.push(
+      `style CONNECT fill:${lane1},stroke:transparent,stroke-width:0px`,
+      `style STATE_PORTAL fill:${lane2},stroke:transparent,stroke-width:0px`,
+      'classDef action fill:#ffffff,stroke:#4f46e5,stroke-width:1.4px,color:#111827,rx:8,ry:8',
+      'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827,rx:12,ry:12'
+    );
     steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
 
     return L.join("\n");
@@ -171,6 +147,30 @@ L.push(
 
       mermaid.initialize({ startOnLoad:false, theme:'default', flowchart:{ curve:'linear', htmlLabels:false } });
       mermaid.init(undefined, el);
+
+      // Quick Facts
+      const facts = [];
+      if (data.meta) {
+        if (data.meta.sl_tax_rate) facts.push(`SL Tax Rate: ${data.meta.sl_tax_rate}`);
+        if (data.meta.stamping_fee_rate) facts.push(`Stamping Fee Rate: ${data.meta.stamping_fee_rate}`);
+        if (data.meta.filing_due_dates) facts.push(`Filing Due Dates: ${data.meta.filing_due_dates}`);
+        if (data.meta.payment_frequency) facts.push(`Payment Frequency: ${data.meta.payment_frequency}`);
+        if (data.meta.payment_due_dates) facts.push(`Payment Due Dates: ${data.meta.payment_due_dates}`);
+        if (data.meta.zero_reports) {
+          if (data.meta.zero_reports.sl_tax) facts.push(`Zero Reports (SL Tax): ${data.meta.zero_reports.sl_tax}`);
+          if (data.meta.zero_reports.stamping) facts.push(`Zero Reports (Stamping): ${data.meta.zero_reports.stamping}`);
+        }
+        if (data.meta.late_penalties) facts.push(`Late Penalties: ${data.meta.late_penalties}`);
+        if (data.meta.docs_required) facts.push(`Docs Required: ${data.meta.docs_required.join(", ")}`);
+        if (data.meta.exemptions) facts.push(`Exemptions: ${data.meta.exemptions.join(", ")}`);
+        if (data.meta.ecp) facts.push(`ECP Required: form link ${data.meta.ecp.form}`);
+        if (data.meta.who_files) facts.push(`Who Files: ${data.meta.who_files}`);
+        if (data.meta.fees_taxable) facts.push(`Fees Taxable: ${data.meta.fees_taxable}`);
+        if (data.meta.amendment) facts.push(`Amendment: ${data.meta.amendment}`);
+        if (data.meta.signature) facts.push(`Signature: ${data.meta.signature}`);
+        if (data.meta.rounding) facts.push(`Rounding: ${data.meta.rounding}`);
+      }
+      document.getElementById("factsList").innerHTML = facts.map(f=>`<li>${f}</li>`).join("");
     } catch(e){
       document.getElementById("m").textContent = "Error: " + (e?.message || e);
       console.error(e);
@@ -191,7 +191,6 @@ L.push(
   document.getElementById('btnRefresh').onclick = () => render();
   document.getElementById('btnDownload').onclick = () => downloadSVG();
 
-  // Initial render
   render();
 })();
 </script>
