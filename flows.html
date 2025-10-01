@@ -2,25 +2,19 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>State Flow</title>
+  <title>State Filing Flow</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Stable libs -->
   <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
-  <!-- Stable mermaid -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
     :root{
-      --ink:#111827;         /* text */
-      --muted:#6b7280;       /* secondary text */
-      --lane1:#f8fafc;       /* Connect lane bg */
-      --lane2:#f9fafb;       /* State lane bg */
-      --stroke1:#4f46e5;     /* indigo */
-      --stroke2:#468c98;     /* teal */
-      --action:#ffffff;      /* action node fill */
-      --decision:#fff7ed;    /* decision node fill (warm) */
-      --border:#e5e7eb;
-      --card:#ffffff;
+      --ink:#111827; --muted:#6b7280;
+      --lane1:#f8fafc; --lane2:#f9fafb; /* only for legend & page styling */
+      --border:#e5e7eb; --card:#ffffff;
     }
     *{box-sizing:border-box}
-    body{font-family: Inter, Tahoma, Arial, sans-serif; margin: 24px; background:#f5f6f8; color:var(--ink)}
+    body{font-family: Inter, Tahoma, Arial, sans-serif; margin:24px; background:#f5f6f8; color:var(--ink)}
     .wrap{max-width:1100px;margin:0 auto}
     h1{margin:0 0 8px;font-size:24px;font-weight:800;letter-spacing:.2px}
     .sub{color:var(--muted);margin-bottom:16px}
@@ -29,13 +23,11 @@
     .btn:hover{background:#f9fafb}
     #chart{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px}
     #chart svg{width:100% !important;height:auto !important}
-    pre{background:#f9fafb;border:1px solid var(--border);border-radius:12px;padding:12px;overflow:auto}
-    code{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
-    .src{margin-top:16px}
+    pre{background:#f9fafb;border:1px solid var(--border);border-radius:12px;padding:12px;overflow:auto;margin-top:12px}
     .legend{display:flex;gap:12px;align-items:center;margin:6px 0 14px;font-size:13px;color:var(--muted)}
     .dot{width:10px;height:10px;border-radius:999px;display:inline-block;margin-right:6px;border:1px solid var(--border)}
-    .lane1{background:var(--lane1);border-color:var(--stroke1)}
-    .lane2{background:var(--lane2);border-color:var(--stroke2)}
+    .lane1{background:var(--lane1)}
+    .lane2{background:var(--lane2)}
   </style>
 </head>
 <body>
@@ -55,16 +47,14 @@
 
   <div id="chart"><div id="m" class="mermaid">Loading…</div></div>
 
-  <div class="src">
-    <h3 style="margin:16px 0 6px">Mermaid source</h3>
-    <pre id="mer"></pre>
-  </div>
+  <h3 style="margin:16px 0 6px">Mermaid source</h3>
+  <pre id="mer"></pre>
 </div>
 
 <script>
 (async function(){
   const qs = new URL(location.href).searchParams;
-  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default to TX.yaml
+  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // ✅ default if no param
   document.getElementById("src").textContent = yamlUrl;
 
   // Fetch + parse YAML
@@ -75,16 +65,22 @@
     return jsyaml.load(raw);
   }
 
-  // Label sanitizer -> “dash style” that we know renders nicely
+  // Label sanitizer -> “dash style” that we know renders
   const esc = t => String(t||"")
     .replace(/\s*\(([^)]+)\)/g, " - $1")  // (foo) ->  - foo
-    .replace(/\r?\n/g, " ")               // single line only
+    .replace(/\r?\n/g, " ")               // keep single line
     .replace(/\[/g,"(").replace(/\]/g,")")// avoid bracket collisions
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
     .trim();
 
-  // Build Mermaid with lanes (subgraphs) if present; else infer
+  function inferLane(id){
+    // Fallback so older YAMLs still render in lanes
+    if (/^(open_connect|start_filing|fix_address|archive_receipt)/.test(id)) return 'connect';
+    return 'state_portal';
+  }
+
   function buildMermaid(data){
+    // Normalize steps + lanes
     const steps = (data.steps || []).map(s => ({
       id: s.id,
       type: s.type || 'action',
@@ -95,11 +91,7 @@
       lane: s.lane || s.lane_key || inferLane(s.id)
     }));
 
-    function inferLane(id){
-      if (/^(open_connect|start_filing|fix_address|archive_receipt)/.test(id)) return 'connect';
-      return 'state_portal';
-    }
-
+    // Lane titles (use YAML lanes if provided; else defaults)
     const laneMap = {};
     if (Array.isArray(data.lanes) && data.lanes.length){
       data.lanes.forEach(l => laneMap[l.key] = l.title || l.name || l.key);
@@ -113,9 +105,9 @@
     const allLanes = [...lanesInOrder, ...extraLanes];
 
     const L = [];
-    L.push('flowchart TB'); // vertical, reads better in iframes
+    L.push('flowchart TB'); // vertical, reads better
 
-    // lanes + nodes
+    // Lanes + nodes
     for (const lane of allLanes){
       const title = laneMap[lane] || lane;
       const laneSteps = steps.filter(s => s.lane === lane);
@@ -131,7 +123,7 @@
       L.push('');
     }
 
-    // edges
+    // Edges
     steps.forEach(s=>{
       if (s.type === 'decision') {
         if (s.yes_to) L.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
@@ -141,12 +133,17 @@
       }
     });
 
-    // light styling (kept parser-safe)
+    // Mermaid styles MUST use hex values (no CSS vars here)
+    const stroke1 = '#4f46e5';   // indigo
+    const stroke2 = '#468c98';   // teal
+    const lane1   = '#f8fafc';   // connect lane bg
+    const lane2   = '#f9fafb';   // state lane bg
+
     L.push(
-      `style CONNECT fill:${getComputedStyle(document.documentElement).getPropertyValue('--lane1').trim()},stroke:var(--stroke1),stroke-width:1.4px`,
-      `style STATE_PORTAL fill:${getComputedStyle(document.documentElement).getPropertyValue('--lane2').trim()},stroke:var(--stroke2),stroke-width:1.4px`,
-      'classDef action fill:var(--action),stroke:var(--stroke1),stroke-width:1.4px,color:var(--ink)',
-      'classDef decision fill:var(--decision),stroke:#f04f23,stroke-width:2px,color:var(--ink)'
+      `style CONNECT fill:${lane1},stroke:${stroke1},stroke-width:1.4px`,
+      `style STATE_PORTAL fill:${lane2},stroke:${stroke2},stroke-width:1.4px`,
+      'classDef action fill:#ffffff,stroke:#4f46e5,stroke-width:1.4px,color:#111827',
+      'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827'
     );
     steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
 
@@ -165,7 +162,6 @@
       el.textContent = mer;
       el.removeAttribute("data-processed");
 
-      // straight connectors, neutral theme
       mermaid.initialize({ startOnLoad:false, theme:'default', flowchart:{ curve:'linear', htmlLabels:false } });
       mermaid.init(undefined, el);
     } catch(e){
@@ -174,7 +170,6 @@
     }
   }
 
-  // Download current SVG
   function downloadSVG(){
     const svg = document.querySelector('#chart svg');
     if(!svg){ alert('No diagram yet. Click Refresh.'); return; }
@@ -189,7 +184,7 @@
   document.getElementById('btnRefresh').onclick = () => render();
   document.getElementById('btnDownload').onclick = () => downloadSVG();
 
-  // initial render
+  // Initial render
   render();
 })();
 </script>
