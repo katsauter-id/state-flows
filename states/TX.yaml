@@ -1,69 +1,35 @@
-state: "Texas"
-direction: TB
-lanes:
-  - key: connect
-    title: "InsCipher Connect"
-  - key: state_portal
-    title: "State Portal"
-
-steps:
-  - id: open_connect
-    lane: connect
-    type: action
-    label: "Open InsCipher Connect"
-    next: start_filing
-
-  - id: start_filing
-    lane: connect
-    type: action
-    label: "Start New Filing (select TX)"
-    next: portal_login
-
-  - id: portal_login
-    lane: state_portal
-    type: action
-    label: "Log in to TX Portal"
-    next: address_check
-
-  - id: address_check
-    lane: state_portal
-    type: decision
-    label: "Address mismatch?"
-    yes_to: fix_address
-    no_to: upload_docs
-
-  - id: fix_address
-    lane: connect
-    type: action
-    label: "Fix address in Connect (update and save)"
-    next: portal_login
-
-  - id: upload_docs
-    lane: state_portal
-    type: action
-    label: "Upload Required Docs (package, attachments)"
-    next: submit_filing
-
-  - id: submit_filing
-    lane: state_portal
-    type: action
-    label: "Submit Filing"
-    next: receipt_check
-
-  - id: receipt_check
-    lane: state_portal
-    type: decision
-    label: "Receipt downloaded?"
-    yes_to: archive_receipt
-    no_to: retry_download
-
-  - id: retry_download
-    lane: state_portal
-    type: action
-    label: "Retry download (or open in new tab)"
-    next: receipt_check
-
-  - id: archive_receipt
-    lane: connect
-    type: action
-    label: "Archive receipt in Connect (link to record)"
+meta:
+  sl_tax_rate: "4.85%"
+  stamping_fee_rate: "0.04%"
+  filing_due_dates: "60 days; Annual due 3/1"
+  payment_frequency: "Monthly prepay if ≥ $70K; otherwise Annual"
+  payment_due_dates: "15th of following month; 3/1 for Annual"
+  zero_reports:
+    sl_tax: "Annual zeros not required"
+    stamping: "Zeros required"
+  late_penalties: "1–30d late 5%; 30+d late 10%; interest from day 61; staged $50/$100/$200 assessments; 365+ enforcement"
+  docs_required:
+    - "Declarations Page"
+    - "List of participating insurers + %"
+    - "Coverage parts/schedules (limits)"
+    - "Exclusions"
+    - "Texas ZIP"
+    - "Guaranty Fund Notice"
+    - "Complaint Notice"
+  exemptions:
+    - "International waters >10.4 miles"
+    - "FDIC receivership property"
+    - "NCUA conservatorship"
+    - "Federally chartered CU"
+    - "American Indian tribal lands"
+  ecp:
+    required: true
+    form: "https://drive.google.com/file/d/1tJSI5kgPCghY5C2BAe-YllIatOqz_3af/view"
+  who_files: "Agency or Broker"
+  fees_taxable: "All fees taxable"
+  amendment: "Amendment required"
+  signature: "Annual RPG SRT signed & notarized"
+  rounding: "No"
+  portals:
+    connect: "https://connect.inscipher.com"
+    state: "https://www.sltx.org/filings/"
