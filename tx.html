@@ -1,146 +1,172 @@
 <!doctype html>
-<html lang="en">
+<html>
 <head>
   <meta charset="utf-8" />
   <title>State Filing Flow</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- libs -->
+  <!-- Stable libs -->
   <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
-    :root { --ink:#373f51; --muted:#616161; --border:#e5e7eb; --card:#fff; }
-    html,body{margin:0;padding:0}
-    body{font-family: Tahoma, Arial, sans-serif; color:var(--ink); background:#fafafa}
-    .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
-    h1{font-size:1.25rem;margin:0 0 12px;font-weight:700}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px; white-space:pre-wrap}
+    body { font-family: Inter, Tahoma, Arial, sans-serif; margin:24px; background:#f5f6f8; color:#111827 }
+    .wrap{max-width:1100px;margin:0 auto}
+    h1{margin:0 0 8px;font-size:24px;font-weight:800}
+    .sub{color:#6b7280;margin-bottom:16px}
+    .bar{display:flex;gap:8px;align-items:center;margin:8px 0 16px}
+    .btn{border:1px solid #e5e7eb;background:#fff;padding:8px 12px;border-radius:10px;cursor:pointer}
+    .btn:hover{background:#f9fafb}
+    #chart{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px}
     #chart svg{width:100% !important;height:auto !important}
-    .foot{margin-top:8px;color:var(--muted);font-size:.85rem}
-    .error{color:#b00020;white-space:pre-wrap}
-    a{color:#4f46e5;text-decoration:none}
+    pre{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:12px;overflow:auto;margin-top:12px}
+    .legend{display:flex;gap:12px;align-items:center;margin:6px 0 14px;font-size:13px;color:#6b7280}
+    .dot{width:10px;height:10px;border-radius:999px;display:inline-block;margin-right:6px;border:1px solid #e5e7eb}
+    .lane1{background:#f8fafc}
+    .lane2{background:#f9fafb}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1 id="title">Filing Flow</h1>
-    <div id="chart" class="card">Loading…</div>
-    <div class="foot">Source: <span id="src"></span></div>
+<div class="wrap">
+  <h1 id="title">State Filing Flow</h1>
+  <div class="sub">Source: <span id="src"></span></div>
+
+  <div class="legend">
+    <span><span class="dot lane1"></span>InsCipher Connect</span>
+    <span><span class="dot lane2"></span>State Portal</span>
   </div>
 
-  <script>
-    // ========= Helpers =========
-    const qs = new URL(location.href).searchParams;
-    const yamlUrl = qs.get('yaml') || './states/TX.yaml';
+  <div class="bar">
+    <button id="btnRefresh" class="btn">Refresh</button>
+    <button id="btnDownload" class="btn">Download SVG</button>
+  </div>
 
-    function toTitle(data){
-      const st = data && (data.state || data.State || 'State');
-      return `${st} Filing Flow`;
+  <div id="chart"><div id="m" class="mermaid">Loading…</div></div>
+
+  <h3 style="margin:16px 0 6px">Mermaid source</h3>
+  <pre id="mer"></pre>
+</div>
+
+<script>
+(async function(){
+  const qs = new URL(location.href).searchParams;
+  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default if no param
+  document.getElementById("src").textContent = yamlUrl;
+
+  async function getYaml(url){
+    const res = await fetch(url, { cache: "no-store" });
+    if(!res.ok) throw new Error("Fetch failed " + res.status + " for " + url);
+    const raw  = await res.text();
+    return jsyaml.load(raw);
+  }
+
+  const esc = t => String(t||"")
+    .replace(/\s*\(([^)]+)\)/g, " - $1")
+    .replace(/\r?\n/g, " ")
+    .replace(/\[/g,"(").replace(/\]/g,")")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .trim();
+
+  function inferLane(id){
+    if (/^(open_connect|start_filing|fix_address|archive_receipt)/.test(id)) return 'connect';
+    return 'state_portal';
+  }
+
+  function buildMermaid(data){
+    const steps = (data.steps || []).map(s => ({
+      id: s.id,
+      type: s.type || 'action',
+      label: esc(s.label || s.id),
+      next: s.next,
+      yes_to: s.yes_to,
+      no_to: s.no_to,
+      lane: s.lane || s.lane_key || inferLane(s.id)
+    }));
+
+    const laneMap = {};
+    if (Array.isArray(data.lanes) && data.lanes.length){
+      data.lanes.forEach(l => laneMap[l.key] = l.title || l.name || l.key);
+    } else {
+      laneMap.connect = 'InsCipher Connect';
+      laneMap.state_portal = 'State Portal';
     }
 
-    // ========= YAML -> Mermaid =========
-    function toMermaid(data) {
-      const byLane = {};
-      (data.steps || []).forEach(s => {
-        const lane = s.lane || s.lane_key || 'default';
-        (byLane[lane] ||= []).push(s);
+    const lanesInOrder = Object.keys(laneMap);
+    const extraLanes = [...new Set(steps.map(s=>s.lane))].filter(k => !lanesInOrder.includes(k));
+    const allLanes = [...lanesInOrder, ...extraLanes];
+
+    const L = [];
+    L.push('flowchart TB');
+
+    for (const lane of allLanes){
+      const title = laneMap[lane] || lane;
+      const laneSteps = steps.filter(s => s.lane === lane);
+      if (!laneSteps.length) continue;
+      const laneId = lane.toUpperCase();
+      L.push(`  subgraph ${laneId}[${title}]`);
+      laneSteps.forEach(s => {
+        const node = s.type === 'decision' ? `${s.id}{${s.label}}` : `${s.id}[${s.label}]`;
+        L.push(`    ${node}`);
       });
-
-      const laneTitle = k => ({ connect:"InsCipher Connect", state_portal:"State Portal" }[k] || k);
-      const dir = data.direction || 'LR';           // Use TB in YAML for vertical
-      const lines = [`flowchart ${dir}`];
-
-      // Lanes & nodes
-      for (const [lane, steps] of Object.entries(byLane)) {
-        const laneId = lane.toUpperCase();
-        lines.push(`  subgraph ${laneId}[${laneTitle(lane)}]`);
-        for (const s of steps) {
-          const label = (s.label || s.id)
-            .replace(/\[/g,'(')           // avoid bracket conflicts
-            .replace(/\]/g,')')
-            .replace(/&/g,'&amp;')        // escape entities
-            .replace(/</g,'&lt;')
-            .replace(/>/g,'&gt;')
-            .replace(/\n/g,'\\\\n');      // allow line breaks
-          const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
-          lines.push(`    ${node}`);
-        }
-        lines.push('  end');
-      }
-
-      // Edges
-      for (const s of (data.steps || [])) {
-        if (s.type === 'decision') {
-          if (s.yes_to) lines.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
-          if (s.no_to)  lines.push(`  ${s.id} -- No --> ${s.no_to}`);
-        } else if (s.next) {
-          lines.push(`  ${s.id} --> ${s.next}`);
-        }
-      }
-
-      // Lane + node styles (neutral lanes, muted indigo borders, straight lines set in init)
-      lines.push(
-        'style CONNECT fill:#f8f9fa,stroke:#4f46e5,stroke-width:1.5px',
-        'style STATE_PORTAL fill:#f8f9fa,stroke:#468c98,stroke-width:1.5px',
-        'classDef action   fill:#ffffff,stroke:#4f46e5,stroke-width:1.5px,color:#373f51',
-        'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#373f51',
-        'linkStyle default stroke:#616161,stroke-width:1.5px,opacity:0.9'
-      );
-      (data.steps || []).forEach(s => {
-        const cls = s.type === 'decision' ? 'decision' : 'action';
-        lines.push(`class ${s.id} ${cls}`);
-      });
-
-      return lines.join('\n');
+      L.push('  end');
+      L.push('');
     }
 
-    // ========= Main (with clear error output) =========
-    async function main(){
-      try {
-        document.getElementById('src').textContent = yamlUrl;
-
-        // Fetch YAML
-        const res = await fetch(yamlUrl, { cache: 'no-store' });
-        if(!res.ok) throw new Error(`Fetch failed (${res.status}) for ${yamlUrl}`);
-        const raw = await res.text();
-
-        // Parse YAML
-        let data;
-        try { data = jsyaml.load(raw); }
-        catch(e){ throw new Error('YAML parse error: ' + e.message); }
-
-        // Title
-        document.title = toTitle(data);
-        document.getElementById('title').textContent = toTitle(data);
-
-        // Build Mermaid text and render
-        const mer = toMermaid(data);
-
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: "base",
-          flowchart: { useMaxWidth:true, curve:"linear", padding:12, htmlLabels:false },
-          themeVariables: {
-            fontFamily: 'Tahoma, Arial, sans-serif',
-            primaryColor: '#ffffff',
-            primaryTextColor: '#373f51',
-            primaryBorderColor: '#4f46e5',
-            lineColor: '#616161',
-            tertiaryColor: '#f04f23'
-          }
-        });
-
-        const { svg } = await mermaid.render('diagram', mer);
-        document.getElementById('chart').innerHTML = svg;
-
-      } catch (err) {
-        const c = document.getElementById('chart');
-        c.className = 'card error';
-        c.textContent = 'Error loading diagram:\n' + err.message + '\n\nSource: ' + yamlUrl;
-        console.error(err);
+    steps.forEach(s=>{
+      if (s.type === 'decision') {
+        if (s.yes_to) L.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
+        if (s.no_to)  L.push(`  ${s.id} -- No --> ${s.no_to}`);
+      } else if (s.next) {
+        L.push(`  ${s.id} --> ${s.next}`);
       }
-    }
+    });
 
-    main();
-  </script>
+    // styles: no swimlane outlines (stroke:transparent)
+    L.push(
+      'style CONNECT fill:#f8fafc,stroke:transparent,stroke-width:0px',
+      'style STATE_PORTAL fill:#f9fafb,stroke:transparent,stroke-width:0px',
+      'classDef action fill:#ffffff,stroke:#4f46e5,stroke-width:1.4px,color:#111827,rx:8,ry:8',
+      'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827,rx:12,ry:12'
+    );
+    steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
+
+    return L.join("\n");
+  }
+
+  async function render(){
+    try{
+      const data = await getYaml(yamlUrl);
+      document.getElementById("title").textContent = `${data.state || 'State'} Filing Flow`;
+
+      const mer = buildMermaid(data);
+      document.getElementById("mer").textContent = mer;
+
+      const el = document.getElementById("m");
+      el.textContent = mer;
+      el.removeAttribute("data-processed");
+
+      mermaid.initialize({ startOnLoad:false, theme:'default', flowchart:{ curve:'linear', htmlLabels:false } });
+      mermaid.init(undefined, el);
+    } catch(e){
+      document.getElementById("m").textContent = "Error: " + (e?.message || e);
+      console.error(e);
+    }
+  }
+
+  function downloadSVG(){
+    const svg = document.querySelector('#chart svg');
+    if(!svg){ alert('No diagram yet. Click Refresh.'); return; }
+    const blob = new Blob([svg.outerHTML], {type:'image/svg+xml'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (document.getElementById('title').textContent || 'diagram').replace(/\s+/g,'_') + '.svg';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  document.getElementById('btnRefresh').onclick = () => render();
+  document.getElementById('btnDownload').onclick = () => downloadSVG();
+
+  render();
+})();
+</script>
 </body>
 </html>
