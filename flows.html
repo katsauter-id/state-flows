@@ -2,12 +2,13 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>State Filing Flow</title>
+  <title>State Filing Flow (diag)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
+  <!-- Stable Mermaid -->
   <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
-    body{font-family: Inter, Tahoma, Arial, sans-serif; margin:24px; background:#f5f6f8; color:#111827}
+    body{font-family:Inter, Tahoma, Arial, sans-serif; margin:24px; background:#f5f6f8; color:#111827}
     .wrap{max-width:1100px;margin:0 auto}
     h1{margin:0 0 8px;font-size:24px;font-weight:800}
     .sub{color:#6b7280;margin-bottom:16px}
@@ -20,6 +21,7 @@
     #facts{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-top:20px}
     #facts h3{margin-top:0}
     #facts ul{margin:0;padding-left:20px;line-height:1.5}
+    .err{white-space:pre-wrap;color:#b00020;margin-top:8px}
   </style>
 </head>
 <body>
@@ -35,6 +37,7 @@
   </div>
 
   <div id="chart"><div id="m" class="mermaid">Loading…</div></div>
+  <div id="parseErr" class="err"></div>
 
   <h3 style="margin:16px 0 6px">Mermaid source</h3>
   <pre id="mer"></pre>
@@ -58,9 +61,15 @@
     return jsyaml.load(raw);
   }
 
+  // Normalize labels to avoid parser quirks
   const esc = t => String(t||"")
-    .replace(/\s*\(([^)]+)\)/g, " - $1")
-    .replace(/\r?\n/g, " ")
+    .replace(/\s*\(([^)]+)\)/g, " - $1") // (foo) ->  - foo
+    .replace(/\u2265/g, ">=")            // ≥ -> >=
+    .replace(/\u2264/g, "<=")            // ≤ -> <=
+    .replace(/[“”]/g, '"')               // smart quotes -> "
+    .replace(/[‘’]/g, "'")               // smart apostrophes -> '
+    .replace(/\u00A0/g, ' ')             // nbsp -> space
+    .replace(/\r?\n/g, " ")              // single line
     .replace(/\[/g,"(").replace(/\]/g,")")
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
     .trim();
@@ -94,6 +103,7 @@
     const L = [];
     L.push('flowchart TB');
 
+    // lanes + nodes
     for (const lane of allLanes){
       const title = laneMap[lane] || lane;
       const laneSteps = steps.filter(s => s.lane === lane);
@@ -108,6 +118,7 @@
       L.push('');
     }
 
+    // edges
     steps.forEach(s=>{
       if (s.type === 'decision') {
         if (s.yes_to) L.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
@@ -117,18 +128,18 @@
       }
     });
 
-    const stroke1 = '#4f46e5';
-    const stroke2 = '#468c98';
-    const lane1   = '#f8fafc';
-    const lane2   = '#f9fafb';
-
+    // styles (hex only) + rounded corners; no lane outlines
+    const lane1 = '#f8fafc', lane2 = '#f9fafb';
     L.push(
       `style CONNECT fill:${lane1},stroke:transparent,stroke-width:0px`,
       `style STATE_PORTAL fill:${lane2},stroke:transparent,stroke-width:0px`,
       'classDef action fill:#ffffff,stroke:#4f46e5,stroke-width:1.4px,color:#111827,rx:8,ry:8',
       'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827,rx:12,ry:12'
     );
-    steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
+    (data.steps||[]).forEach(s => {
+      const cls = (s.type||'action') === 'decision' ? 'decision' : 'action';
+      L.push(`class ${s.id} ${cls}`);
+    });
 
     return L.join("\n");
   }
@@ -141,10 +152,16 @@
       const mer = buildMermaid(data);
       document.getElementById("mer").textContent = mer;
 
+      // Parse first to catch errors clearly
+      const errBox = document.getElementById('parseErr');
+      errBox.textContent = '';
+      try { mermaid.mermaidAPI.parse(mer); }
+      catch(e){ errBox.textContent = 'Parser error:\n' + (e.str || e.message || e); return; }
+
+      // Render
       const el = document.getElementById("m");
       el.textContent = mer;
       el.removeAttribute("data-processed");
-
       mermaid.initialize({ startOnLoad:false, theme:'default', flowchart:{ curve:'linear', htmlLabels:false } });
       mermaid.init(undefined, el);
 
@@ -171,6 +188,7 @@
         if (data.meta.rounding) facts.push(`Rounding: ${data.meta.rounding}`);
       }
       document.getElementById("factsList").innerHTML = facts.map(f=>`<li>${f}</li>`).join("");
+
     } catch(e){
       document.getElementById("m").textContent = "Error: " + (e?.message || e);
       console.error(e);
