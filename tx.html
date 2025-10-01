@@ -27,29 +27,74 @@
     <div class="foot">Source: <span id="src"></span></div>
   </div>
 
-  <script>
-    // --- Mermaid init ---
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: "base",
-      flowchart: { useMaxWidth:true, curve:"linear", padding:12, htmlLabels:true },
-      themeVariables: {
-        fontFamily: 'Tahoma, Arial, sans-serif',
-        primaryColor: '#ffffff',
-        primaryTextColor: '#373f51',
-        primaryBorderColor: '#4f46e5', // muted indigo
-        lineColor: '#616161',
-        tertiaryColor: '#f04f23'
-      }
-    });
+<script>
+  // Simple logger that writes to the page
+  function say(msg) {
+    const c = document.getElementById('chart');
+    c.textContent = (c.textContent || '') + '\n' + msg;
+  }
 
-    const qs = new URL(location.href).searchParams;
-    const yamlUrl = qs.get('yaml') || './states/TX.yaml';
+  async function main(){
+    try {
+      say('🔄 Initializing…');
 
-    function toTitle(data){
-      const st = data && (data.state || data.State || 'State');
-      return `${st} Filing Flow`;
+      const qs = new URL(location.href).searchParams;
+      const yamlUrl = qs.get('yaml') || './states/TX.yaml';
+      document.getElementById('src').textContent = yamlUrl;
+
+      say('⬇️ Fetching YAML: ' + yamlUrl);
+      const res = await fetch(yamlUrl, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`Fetch failed (${res.status}) for ${yamlUrl}`);
+
+      const raw = await res.text();
+      say('✅ YAML fetched, parsing…');
+
+      let data;
+      try { data = jsyaml.load(raw); }
+      catch(e){ throw new Error('YAML parse error: ' + e.message); }
+
+      say('✅ YAML parsed, building diagram…');
+
+      // build mermaid text
+      const mer = toMermaid(data);
+
+      // render
+      say('🧭 Rendering with Mermaid…');
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "base",
+        flowchart: { useMaxWidth:true, curve:"linear", padding:12, htmlLabels:true },
+        themeVariables: {
+          fontFamily: 'Tahoma, Arial, sans-serif',
+          primaryColor: '#ffffff',
+          primaryTextColor: '#373f51',
+          primaryBorderColor: '#4f46e5',
+          lineColor: '#616161',
+          tertiaryColor: '#f04f23'
+        }
+      });
+
+      const out = await mermaid.render('diagram', mer);
+      document.getElementById('chart').innerHTML = out.svg;
+      say('🏁 Done.');
+    } catch (err) {
+      const c = document.getElementById('chart');
+      c.className = 'card error';
+      c.textContent = 'Error loading diagram:\n' + err.message;
+      console.error(err);
     }
+  }
+
+  // show any unexpected errors
+  window.addEventListener('error', e => {
+    const c = document.getElementById('chart');
+    c.className = 'card error';
+    c.textContent = 'Unhandled error:\n' + (e.error?.message || e.message);
+  });
+
+  main();
+</script>
+
 
     // YAML -> Mermaid
     function toMermaid(data) {
