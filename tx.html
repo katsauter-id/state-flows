@@ -13,7 +13,7 @@
     body{font-family: Tahoma, Arial, sans-serif; color:var(--ink); background:#fafafa}
     .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
     h1{font-size:1.25rem;margin:0 0 12px;font-weight:700}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px; white-space:pre-wrap}
     #chart svg{width:100% !important;height:auto !important}
     .foot{margin-top:8px;color:var(--muted);font-size:.85rem}
     .error{color:#b00020;white-space:pre-wrap}
@@ -27,104 +27,47 @@
     <div class="foot">Source: <span id="src"></span></div>
   </div>
 
-<script>
-  // Simple logger that writes to the page
-  function say(msg) {
-    const c = document.getElementById('chart');
-    c.textContent = (c.textContent || '') + '\n' + msg;
-  }
+  <script>
+    // ========= Helpers =========
+    const qs = new URL(location.href).searchParams;
+    const yamlUrl = qs.get('yaml') || './states/TX.yaml';
 
-  async function main(){
-    try {
-      say('🔄 Initializing…');
-
-      const qs = new URL(location.href).searchParams;
-      const yamlUrl = qs.get('yaml') || './states/TX.yaml';
-      document.getElementById('src').textContent = yamlUrl;
-
-      say('⬇️ Fetching YAML: ' + yamlUrl);
-      const res = await fetch(yamlUrl, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`Fetch failed (${res.status}) for ${yamlUrl}`);
-
-      const raw = await res.text();
-      say('✅ YAML fetched, parsing…');
-
-      let data;
-      try { data = jsyaml.load(raw); }
-      catch(e){ throw new Error('YAML parse error: ' + e.message); }
-
-      say('✅ YAML parsed, building diagram…');
-
-      // build mermaid text
-      const mer = toMermaid(data);
-
-      // render
-      say('🧭 Rendering with Mermaid…');
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: "base",
-        flowchart: { useMaxWidth:true, curve:"linear", padding:12, htmlLabels:true },
-        themeVariables: {
-          fontFamily: 'Tahoma, Arial, sans-serif',
-          primaryColor: '#ffffff',
-          primaryTextColor: '#373f51',
-          primaryBorderColor: '#4f46e5',
-          lineColor: '#616161',
-          tertiaryColor: '#f04f23'
-        }
-      });
-
-      const out = await mermaid.render('diagram', mer);
-      document.getElementById('chart').innerHTML = out.svg;
-      say('🏁 Done.');
-    } catch (err) {
-      const c = document.getElementById('chart');
-      c.className = 'card error';
-      c.textContent = 'Error loading diagram:\n' + err.message;
-      console.error(err);
+    function toTitle(data){
+      const st = data && (data.state || data.State || 'State');
+      return `${st} Filing Flow`;
     }
-  }
 
-  // show any unexpected errors
-  window.addEventListener('error', e => {
-    const c = document.getElementById('chart');
-    c.className = 'card error';
-    c.textContent = 'Unhandled error:\n' + (e.error?.message || e.message);
-  });
-
-  main();
-</script>
-
-
-    // YAML -> Mermaid
+    // ========= YAML -> Mermaid =========
     function toMermaid(data) {
       const byLane = {};
       (data.steps || []).forEach(s => {
         const lane = s.lane || s.lane_key || 'default';
         (byLane[lane] ||= []).push(s);
       });
+
       const laneTitle = k => ({ connect:"InsCipher Connect", state_portal:"State Portal" }[k] || k);
-      const dir = data.direction || 'LR';
+      const dir = data.direction || 'LR';           // Use TB in YAML for vertical
       const lines = [`flowchart ${dir}`];
 
+      // Lanes & nodes
       for (const [lane, steps] of Object.entries(byLane)) {
         const laneId = lane.toUpperCase();
         lines.push(`  subgraph ${laneId}[${laneTitle(lane)}]`);
         for (const s of steps) {
           const label = (s.label || s.id)
-          .replace(/\[/g, '(')           // avoid bracket collisions
-          .replace(/\]/g, ')')
-          .replace(/&/g, '&amp;')        // escape HTML entities
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/\n/g, '<br/>');      // allow line breaks
-
+            .replace(/\[/g,'(')           // avoid bracket conflicts
+            .replace(/\]/g,')')
+            .replace(/&/g,'&amp;')        // escape entities
+            .replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;')
+            .replace(/\n/g,'<br/>');      // allow line breaks
           const node = s.type === 'decision' ? `${s.id}{${label}}` : `${s.id}[${label}]`;
           lines.push(`    ${node}`);
         }
         lines.push('  end');
       }
 
+      // Edges
       for (const s of (data.steps || [])) {
         if (s.type === 'decision') {
           if (s.yes_to) lines.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
@@ -134,11 +77,12 @@
         }
       }
 
+      // Lane + node styles (neutral lanes, muted indigo borders, straight lines set in init)
       lines.push(
         'style CONNECT fill:#f8f9fa,stroke:#4f46e5,stroke-width:1.5px',
         'style STATE_PORTAL fill:#f8f9fa,stroke:#468c98,stroke-width:1.5px',
-        classDef action   fill:#ffffff,stroke:#4f46e5,stroke-width:1.5px,color:#373f51
-        classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#373f51
+        'classDef action   fill:#ffffff,stroke:#4f46e5,stroke-width:1.5px,color:#373f51',
+        'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#373f51',
         'linkStyle default stroke:#616161,stroke-width:1.5px,opacity:0.9'
       );
       (data.steps || []).forEach(s => {
@@ -149,33 +93,54 @@
       return lines.join('\n');
     }
 
+    // ========= Main (with clear error output) =========
     async function main(){
-      document.getElementById('src').textContent = yamlUrl;
-      const res = await fetch(yamlUrl, { cache: 'no-store' });
-      if(!res.ok) throw new Error(`Fetch failed (${res.status}) for ${yamlUrl}`);
-      const raw = await res.text();
-      let data;
-      try { data = jsyaml.load(raw); }
-      catch(e){ throw new Error('YAML parse error: ' + e.message); }
+      try {
+        document.getElementById('src').textContent = yamlUrl;
 
-      document.title = toTitle(data);
-      document.getElementById('title').textContent = toTitle(data);
+        // Fetch YAML
+        const res = await fetch(yamlUrl, { cache: 'no-store' });
+        if(!res.ok) throw new Error(`Fetch failed (${res.status}) for ${yamlUrl}`);
+        const raw = await res.text();
 
-      const mer = toMermaid(data);
-      console.log(mer);
-document.body.insertAdjacentHTML('beforeend', '<pre style="white-space:pre-wrap;margin:16px">'+
-  mer.replace(/&/g,'&amp;').replace(/</g,'&lt;')+
-'</pre>');
+        // Parse YAML
+        let data;
+        try { data = jsyaml.load(raw); }
+        catch(e){ throw new Error('YAML parse error: ' + e.message); }
 
-      const { svg } = await mermaid.render('diagram', mer);
-      document.getElementById('chart').innerHTML = svg;
+        // Title
+        document.title = toTitle(data);
+        document.getElementById('title').textContent = toTitle(data);
+
+        // Build Mermaid text and render
+        const mer = toMermaid(data);
+
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: "base",
+          flowchart: { useMaxWidth:true, curve:"linear", padding:12, htmlLabels:true },
+          themeVariables: {
+            fontFamily: 'Tahoma, Arial, sans-serif',
+            primaryColor: '#ffffff',
+            primaryTextColor: '#373f51',
+            primaryBorderColor: '#4f46e5',
+            lineColor: '#616161',
+            tertiaryColor: '#f04f23'
+          }
+        });
+
+        const { svg } = await mermaid.render('diagram', mer);
+        document.getElementById('chart').innerHTML = svg;
+
+      } catch (err) {
+        const c = document.getElementById('chart');
+        c.className = 'card error';
+        c.textContent = 'Error loading diagram:\n' + err.message + '\n\nSource: ' + yamlUrl;
+        console.error(err);
+      }
     }
 
-    main().catch(err=>{
-      const c = document.getElementById('chart');
-      c.className = 'card error';
-      c.textContent = 'Error loading diagram:\n' + err.message;
-    });
+    main();
   </script>
 </body>
 </html>
