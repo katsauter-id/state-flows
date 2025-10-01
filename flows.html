@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>State Flow</title>
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
+  <style>
+    body { font-family: Tahoma, Arial, sans-serif; margin: 16px; background: #fafafa }
+    #chart .mermaid { white-space: pre }
+    pre { background: #f6f6f6; padding: 10px; border-radius: 8px }
+  </style>
+</head>
+<body>
+<h1 id="title">State Flow</h1>
+<div>Source: <span id="src"></span></div>
+<div id="chart"><div id="m" class="mermaid">Loading…</div></div>
+<h3>Mermaid source</h3>
+<pre id="mer"></pre>
+
+<script>
+(async function(){
+  const qs = new URL(location.href).searchParams;
+  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // ✅ default to TX.yaml
+  document.getElementById("src").textContent = yamlUrl;
+
+  const res = await fetch(yamlUrl, { cache: "no-store" });
+  if(!res.ok) { document.getElementById("chart").textContent = "Fetch failed " + res.status; return; }
+  const raw = await res.text();
+  const data = jsyaml.load(raw);
+
+  const esc = t => String(t||"")
+    .replace(/\r?\n/g," ")
+    .replace(/\[/g,"(").replace(/\]/g,")")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+  const L = ["flowchart TB"];
+  (data.steps||[]).forEach(s=>{
+    const node = s.type==="decision"
+      ? `${s.id}{${esc(s.label||s.id)}}`
+      : `${s.id}[${esc(s.label||s.id)}]`;
+    L.push(node);
+  });
+  (data.steps||[]).forEach(s=>{
+    if(s.type==="decision"){
+      if(s.yes_to) L.push(`${s.id} -- Yes --> ${s.yes_to}`);
+      if(s.no_to)  L.push(`${s.id} -- No --> ${s.no_to}`);
+    } else if(s.next){
+      L.push(`${s.id} --> ${s.next}`);
+    }
+  });
+
+  const mer = L.join("\n");
+  document.getElementById("mer").textContent = mer;
+
+  const el = document.getElementById("m");
+  el.textContent = mer;
+  el.removeAttribute("data-processed");
+  mermaid.initialize({ startOnLoad:false });
+  mermaid.init(undefined, el);
+
+})();
+</script>
+</body>
+</html>
