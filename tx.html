@@ -80,7 +80,7 @@
 
   function inferLaneById(id){
     if (/^(open_connect|start_filing|fix_address|archive_receipt|download_policy|verify_)/.test(id)) return 'connect';
-    return 'state_portal';
+    return 'connect';
   }
 
   function buildMermaid(data){
