@@ -2,26 +2,36 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Texas Filing Flow</title>
+  <title>Texas Filing Flow — Portrait</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Stable libs -->
   <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
     body { font-family: Inter, Tahoma, Arial, sans-serif; margin:24px; background:#f5f6f8; color:#111827 }
-    .wrap{max-width:1100px;margin:0 auto}
+    .wrap{max-width:720px;margin:0 auto} /* 👈 Portrait-friendly width */
     h1{margin:0 0 8px;font-size:24px;font-weight:800}
-    .sub{color:#6b7280;margin-bottom:16px}
-    .bar{display:flex;gap:8px;align-items:center;margin:8px 0 16px}
-    .btn{border:1px solid #e5e7eb;background:#fff;padding:8px 12px;border-radius:10px;cursor:pointer}
-    .btn:hover{background:#f9fafb}
-    #chart{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px}
-    #chart svg{width:100% !important;height:auto !important}
-    pre{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:12px;overflow:auto;margin-top:12px}
-    .legend{display:flex;gap:12px;align-items:center;margin:6px 0 14px;font-size:13px;color:#6b7280}
+    .sub{color:#6b7280;margin-bottom:12px}
+    .legend{display:flex;gap:12px;align-items:center;margin:6px 0 12px;font-size:13px;color:#6b7280}
     .dot{width:10px;height:10px;border-radius:999px;display:inline-block;margin-right:6px;border:1px solid #e5e7eb}
     .lane1{background:#f8fafc}
     .lane2{background:#f9fafb}
+    .bar{display:flex;gap:8px;align-items:center;margin:8px 0 12px;flex-wrap:wrap}
+    .btn{border:1px solid #e5e7eb;background:#fff;padding:8px 12px;border-radius:10px;cursor:pointer}
+    .btn:hover{background:#f9fafb}
+    #chart-wrap{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px}
+    #chart{transform-origin: top center;} /* zoom anchor */
+    #chart svg{width:100% !important;height:auto !important}
+    pre{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:12px;overflow:auto;margin-top:12px}
+
+    /* Print-friendly portrait */
+    @media print {
+      @page { size: A4 portrait; margin: 12mm; }
+      body { background:#fff; margin:0 }
+      #mer { display:none }
+      .bar, .legend, .sub { display:none }
+      .wrap { max-width: 700px }
+    }
   </style>
 </head>
 <body>
@@ -36,10 +46,15 @@
 
   <div class="bar">
     <button id="btnRefresh" class="btn">Refresh</button>
+    <button id="btnZoomIn" class="btn">Zoom +</button>
+    <button id="btnZoomOut" class="btn">Zoom −</button>
+    <button id="btnZoomReset" class="btn">Reset</button>
     <button id="btnDownload" class="btn">Download SVG</button>
   </div>
 
-  <div id="chart"><div id="m" class="mermaid">Loading…</div></div>
+  <div id="chart-wrap">
+    <div id="chart"><div id="m" class="mermaid">Loading…</div></div>
+  </div>
 
   <h3 style="margin:16px 0 6px">Mermaid source</h3>
   <pre id="mer"></pre>
@@ -51,6 +66,11 @@
   const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default to TX.yaml
   document.getElementById("src").textContent = yamlUrl;
 
+  let scale = 1;
+  function applyScale(){
+    document.getElementById('chart').style.transform = `scale(${scale})`;
+  }
+
   async function getYaml(url){
     const res = await fetch(url, { cache: "no-store" });
     if(!res.ok) throw new Error("Fetch failed " + res.status + " for " + url);
@@ -58,16 +78,15 @@
     return jsyaml.load(raw);
   }
 
-  // “Dash style” labels that we know render well
+  // Labels: keep single-line; convert ( ) to " - "
   const esc = t => String(t||"")
-    .replace(/\s*\(([^)]+)\)/g, " - $1")  // (foo) ->  - foo
-    .replace(/\r?\n/g, " ")               // single line
-    .replace(/\[/g,"(").replace(/\]/g,")")// avoid bracket collisions
+    .replace(/\s*\(([^)]+)\)/g, " - $1")
+    .replace(/\r?\n/g, " ")
+    .replace(/\[/g,"(").replace(/\]/g,")")
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
     .trim();
 
   function inferLane(id){
-    // If you add a State Portal lane later, this keeps older YAMLs working
     if (/^(open_connect|start_filing|fix_address|archive_receipt|download_policy|verify_)/.test(id)) return 'connect';
     return 'state_portal';
   }
@@ -83,7 +102,6 @@
       lane: s.lane || s.lane_key || inferLane(s.id)
     }));
 
-    // Lane titles (defaults if not provided)
     const laneMap = {};
     if (Array.isArray(data.lanes) && data.lanes.length){
       data.lanes.forEach(l => laneMap[l.key] = l.title || l.name || l.key);
@@ -97,9 +115,10 @@
     const allLanes = [...lanesInOrder, ...extraLanes];
 
     const L = [];
-    L.push('flowchart TB'); // vertical layout
+    // Portrait = vertical direction
+    L.push('flowchart TB');
 
-    // Lanes + nodes
+    // lanes + nodes (stacked vertically inside each subgraph)
     for (const lane of allLanes){
       const title = laneMap[lane] || lane;
       const laneSteps = steps.filter(s => s.lane === lane);
@@ -115,7 +134,7 @@
       L.push('');
     }
 
-    // Edges
+    // edges
     steps.forEach(s=>{
       if (s.type === 'decision') {
         if (s.yes_to) L.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
@@ -125,13 +144,15 @@
       }
     });
 
-    // Styles: no lane outlines (stroke transparent), rounded nodes
+    // styles: no lane outlines; rounded nodes
     L.push(
       'style CONNECT fill:#f8fafc,stroke:transparent,stroke-width:0px',
       'style STATE_PORTAL fill:#f9fafb,stroke:transparent,stroke-width:0px',
       'classDef action fill:#ffffff,stroke:#4f46e5,stroke-width:1.4px,color:#111827,rx:8,ry:8',
       'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827,rx:12,ry:12'
     );
+
+    // assign classes
     steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
 
     return L.join("\n");
@@ -149,8 +170,23 @@
       el.textContent = mer;
       el.removeAttribute("data-processed");
 
-      mermaid.initialize({ startOnLoad:false, theme:'default', flowchart:{ curve:'linear', htmlLabels:false } });
+      // Portrait-friendly spacing: straight lines, slightly tighter ranks
+      mermaid.initialize({
+        startOnLoad:false,
+        theme:'default',
+        flowchart:{
+          curve:'linear',
+          htmlLabels:false,
+          useMaxWidth:true,
+          nodeSpacing: 40,  // default ~50; reduce to keep it narrow
+          rankSpacing: 60,  // vertical spacing between rows
+          padding: 8
+        }
+      });
       mermaid.init(undefined, el);
+
+      // reset zoom each render
+      scale = 1; applyScale();
     } catch(e){
       document.getElementById("m").textContent = "Error: " + (e?.message || e);
       console.error(e);
@@ -168,10 +204,14 @@
     URL.revokeObjectURL(a.href);
   }
 
+  // zoom controls
   document.getElementById('btnRefresh').onclick = () => render();
   document.getElementById('btnDownload').onclick = () => downloadSVG();
+  document.getElementById('btnZoomIn').onclick = () => { scale = Math.min(2.0, +(scale + 0.1).toFixed(2)); applyScale(); };
+  document.getElementById('btnZoomOut').onclick = () => { scale = Math.max(0.6, +(scale - 0.1).toFixed(2)); applyScale(); };
+  document.getElementById('btnZoomReset').onclick = () => { scale = 1; applyScale(); };
 
-  // Initial render
+  // initial render
   render();
 })();
 </script>
