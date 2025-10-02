@@ -96,18 +96,13 @@
 
     // Only include lanes that actually have steps
     const usedLaneKeys = [...new Set(steps.map(s=>s.laneKey))];
-    // Optional: titles if present in YAML, otherwise blank (we'll hide headers anyway)
-    const titleByKey = {};
-    if (Array.isArray(data.lanes)) {
-      data.lanes.forEach(l => { titleByKey[l.key] = l.title || ''; });
-    }
 
     const L = [];
     L.push('flowchart TB'); // portrait direction
 
     const anchorIds = [];
 
-    // lanes + nodes + invisible anchors; empty lane titles to hide headers
+    // lanes + nodes + invisible anchors; use a “blank” title [" "] to avoid syntax errors
     for (const laneKey of usedLaneKeys){
       const laneSteps = steps.filter(s => s.laneKey === laneKey);
       if (!laneSteps.length) continue;
@@ -116,8 +111,8 @@
       const anchorId = `${laneId}_ANCHOR`;
       anchorIds.push(anchorId);
 
-      // Empty [] → no visible subgraph title
-      L.push(`  subgraph ${laneId}[]`);
+      // 👇 the critical change: use [" "] instead of [] for an “empty” header
+      L.push(`  subgraph ${laneId}[" "]`);
       L.push(`    direction TB`);
       L.push(`    ${anchorId}(( ))`);
       L.push(`    class ${anchorId} ghost`);
