@@ -102,35 +102,33 @@
   }));
 
     // Only include lanes that actually have steps
-    const usedLaneKeys = [...new Set(steps.map(s=>s.laneKey))];
+     const usedLaneKeys = [...new Set(steps.map(s => s.laneKey))]; // 👈 actual lanes to render
+  const L = [];
+  L.push('flowchart TB');
 
-    const L = [];
-    L.push('flowchart TB'); // portrait direction
+  const anchorIds = [];
 
-    const anchorIds = [];
+  for (const laneKey of usedLaneKeys){
+    const laneSteps = steps.filter(s => s.laneKey === laneKey);
+    if (!laneSteps.length) continue;
 
-    // lanes + nodes + invisible anchors; use a “blank” title [" "] to avoid syntax errors
-    for (const laneKey of usedLaneKeys){
-      const laneSteps = steps.filter(s => s.laneKey === laneKey);
-      if (!laneSteps.length) continue;
+    const laneId = laneKey.toUpperCase();
+    const anchorId = `${laneId}_ANCHOR`;
+    anchorIds.push(anchorId);
 
-      const laneId = laneKey.toUpperCase();
-      const anchorId = `${laneId}_ANCHOR`;
-      anchorIds.push(anchorId);
+    L.push(`  subgraph ${laneId}[" "]`);
+    L.push(`    direction TB`);
+    L.push(`    ${anchorId}(( ))`);
+    L.push(`    class ${anchorId} ghost`);
 
-      // 👇 the critical change: use [" "] instead of [] for an “empty” header
-      L.push(`  subgraph ${laneId}[" "]`);
-      L.push(`    direction TB`);
-      L.push(`    ${anchorId}(( ))`);
-      L.push(`    class ${anchorId} ghost`);
+    laneSteps.forEach(s => {
+      const node = s.type === 'decision' ? `${s.id}{${s.label}}` : `${s.id}[${s.label}]`;
+      L.push(`    ${node}`);
+    });
+    L.push('  end');
+    L.push('');
+  }
 
-      laneSteps.forEach(s => {
-        const node = s.type === 'decision' ? `${s.id}{${s.label}}` : `${s.id}[${s.label}]`;
-        L.push(`    ${node}`);
-      });
-      L.push('  end');
-      L.push('');
-    }
 
     // edges between steps
     steps.forEach(s=>{
