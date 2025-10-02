@@ -196,18 +196,20 @@
       el.textContent = mer;
       el.removeAttribute("data-processed");
 
-      mermaid.initialize({
-        startOnLoad:false,
-        theme:'default',
-        flowchart:{
-          curve:'linear',
-          htmlLabels:false,
-          useMaxWidth:true,
-          nodeSpacing: 40,  // tighter
-          rankSpacing: 60,  // portrait vertical spacing
-          padding: 8
-        }
-      });
+     mermaid.initialize({
+  startOnLoad:false,
+  theme:'default',
+  flowchart:{
+    curve:'linear',
+    htmlLabels:false,
+    useMaxWidth:true,
+    nodeSpacing: 40,
+    rankSpacing: 60,
+    padding: 8,
+    ranker: 'tight-tree'   // 👈 force vertical stacking preference
+  }
+});
+
       mermaid.init(undefined, el);
     } catch(e){
       document.getElementById("m").textContent = "Error: " + (e?.message || e);
