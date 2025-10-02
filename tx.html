@@ -43,7 +43,7 @@
 <script>
 (async function(){
   const qs = new URL(location.href).searchParams;
-  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   
+  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default to TX.yaml
   document.getElementById("src").textContent = yamlUrl;
 
   async function getYaml(url){
@@ -53,6 +53,7 @@
     return jsyaml.load(raw);
   }
 
+  // wrap labels (use \n, no HTML)
   function wrapText(str, width){
     const words = String(str||'').split(/\s+/);
     let line = '', out = [];
@@ -93,25 +94,21 @@
       laneKey: s.lane || s.lane_key || inferLaneById(s.id)
     }));
 
-    const laneMap = {};
-    if (Array.isArray(data.lanes) && data.lanes.length){
-      data.lanes.forEach(l => { laneMap[l.key] = l.title || l.name || l.key; });
-    } else {
-      laneMap.connect = 'InsCipher Connect';
-      laneMap.state_portal = 'State Portal';
+    // Only include lanes that actually have steps
+    const usedLaneKeys = [...new Set(steps.map(s=>s.laneKey))];
+    // Optional: titles if present in YAML, otherwise blank (we'll hide headers anyway)
+    const titleByKey = {};
+    if (Array.isArray(data.lanes)) {
+      data.lanes.forEach(l => { titleByKey[l.key] = l.title || ''; });
     }
 
-    const lanesInOrder = Object.keys(laneMap);
-    const extraLanes = [...new Set(steps.map(s=>s.laneKey))].filter(k => !lanesInOrder.includes(k));
-    const allLanes = [...lanesInOrder, ...extraLanes];
-
     const L = [];
-    L.push('flowchart TB');
+    L.push('flowchart TB'); // portrait direction
 
     const anchorIds = [];
 
-    for (const laneKey of allLanes){
-      const title = laneMap[laneKey] || laneKey;
+    // lanes + nodes + invisible anchors; empty lane titles to hide headers
+    for (const laneKey of usedLaneKeys){
       const laneSteps = steps.filter(s => s.laneKey === laneKey);
       if (!laneSteps.length) continue;
 
@@ -119,10 +116,12 @@
       const anchorId = `${laneId}_ANCHOR`;
       anchorIds.push(anchorId);
 
-      L.push(`  subgraph ${laneId}[${title}]`);
+      // Empty [] → no visible subgraph title
+      L.push(`  subgraph ${laneId}[]`);
       L.push(`    direction TB`);
       L.push(`    ${anchorId}(( ))`);
       L.push(`    class ${anchorId} ghost`);
+
       laneSteps.forEach(s => {
         const node = s.type === 'decision' ? `${s.id}{${s.label}}` : `${s.id}[${s.label}]`;
         L.push(`    ${node}`);
@@ -131,6 +130,7 @@
       L.push('');
     }
 
+    // edges between steps
     steps.forEach(s=>{
       if (s.type === 'decision') {
         if (s.yes_to) L.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
@@ -140,6 +140,7 @@
       }
     });
 
+    // chain lane anchors to stack lanes vertically (A above B)
     if (anchorIds.length > 1){
       for (let i = 0; i < anchorIds.length - 1; i++){
         const A = anchorIds[i];
@@ -148,6 +149,7 @@
       }
     }
 
+    // styles: no lane outlines; rounded nodes; hide anchors
     L.push(
       'style CONNECT fill:#f8fafc,stroke:transparent,stroke-width:0px',
       'style STATE_PORTAL fill:#f9fafb,stroke:transparent,stroke-width:0px',
