@@ -45,9 +45,8 @@
   const qs = new URL(location.href).searchParams;
   const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default to TX.yaml
   document.getElementById("src").textContent = yamlUrl;
-  const FORCE_SINGLE_LANE = true;   // 👈 collapse all steps into the "connect" lane
 
-
+  // --- fetch YAML
   async function getYaml(url){
     const res = await fetch(url, { cache: "no-store" });
     if(!res.ok) throw new Error("Fetch failed " + res.status + " for " + url);
@@ -55,7 +54,7 @@
     return jsyaml.load(raw);
   }
 
-  // wrap labels (use \n, no HTML)
+  // --- helpers
   function wrapText(str, width){
     const words = String(str||'').split(/\s+/);
     let line = '', out = [];
@@ -80,55 +79,39 @@
       .trim();
   };
 
-  function inferLaneById(id){
-    if (/^(open_connect|start_filing|fix_address|archive_receipt|download_policy|verify_)/.test(id)) return 'connect';
-    return 'connect';
-  }
-
+  // --- build Mermaid from YAML (single-lane: CONNECT)
   function buildMermaid(data){
-  const declaredLaneKeys = Array.isArray(data.lanes) ? data.lanes.map(l => l.key) : [];
-  const singleLaneDeclared = declaredLaneKeys.length === 1 ? declaredLaneKeys[0] : 'connect';
+    const steps = (data.steps || []).map(s => ({
+      id: s.id,
+      type: s.type || 'action',
+      label: esc(s.label || s.id),
+      next: s.next,
+      yes_to: s.yes_to,
+      no_to: s.no_to
+    }));
 
-  const steps = (data.steps || []).map(s => ({
-    id: s.id,
-    type: s.type || 'action',
-    label: esc(s.label || s.id),
-    next: s.next,
-    yes_to: s.yes_to,
-    no_to: s.no_to,
-    laneKey: FORCE_SINGLE_LANE
-      ? 'connect'                                   // 👈 force single lane
-      : (s.lane || s.lane_key || singleLaneDeclared || 'connect')
-  }));
+    const L = [];
+    L.push('flowchart TB'); // portrait
 
-    // Only include lanes that actually have steps
-     const usedLaneKeys = ['connect']; // 👈 only render this lane
+    // single lane subgraph with blank-looking title
+    const laneId = 'CONNECT';
+    const anchorId = `${laneId}_ANCHOR`;
 
-  const L = [];
-  L.push('flowchart TB');
-
-  const anchorIds = [];
-
-  for (const laneKey of usedLaneKeys){
-    const laneSteps = steps.filter(s => s.laneKey === laneKey);
-    if (!laneSteps.length) continue;
-
-    const laneId = 'CONNECT";
-      L.push('subgraph ${laneId}[""]);
+    L.push(`  subgraph ${laneId}[" "]`);
     L.push(`    direction TB`);
     L.push(`    ${anchorId}(( ))`);
     L.push(`    class ${anchorId} ghost`);
 
-    laneSteps.forEach(s => {
+    // nodes
+    steps.forEach(s => {
       const node = s.type === 'decision' ? `${s.id}{${s.label}}` : `${s.id}[${s.label}]`;
       L.push(`    ${node}`);
     });
+
     L.push('  end');
     L.push('');
-  }
 
-
-    // edges between steps
+    // edges
     steps.forEach(s=>{
       if (s.type === 'decision') {
         if (s.yes_to) L.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
@@ -138,28 +121,21 @@
       }
     });
 
-    // chain lane anchors to stack lanes vertically (A above B)
-    if (anchorIds.length > 1){
-      for (let i = 0; i < anchorIds.length - 1; i++){
-        const A = anchorIds[i];
-        const B = anchorIds[i+1];
-        L.push(`  ${A} -.-> ${B}`);
-      }
-    }
-
-    // styles: no lane outlines; rounded nodes; hide anchors
+    // styles (no lane outlines, rounded nodes, hide anchor)
     L.push(
       'style CONNECT fill:#f8fafc,stroke:transparent,stroke-width:0px',
-      'style STATE_PORTAL fill:#f9fafb,stroke:transparent,stroke-width:0px',
       'classDef action fill:#ffffff,stroke:#4f46e5,stroke-width:1.4px,color:#111827,rx:8,ry:8',
       'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827,rx:12,ry:12',
       'classDef ghost fill:transparent,stroke:transparent'
     );
 
+    // classes
     steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
+
     return L.join("\n");
   }
 
+  // --- render
   async function render(){
     try{
       const data = await getYaml(yamlUrl);
@@ -191,9 +167,11 @@
     }
   }
 
+  // --- buttons
   document.getElementById('btnRefresh').onclick = () => render();
   document.getElementById('btnPrint').onclick = () => window.print();
 
+  // first render
   render();
 })();
 </script>
