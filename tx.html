@@ -68,6 +68,7 @@
     return jsyaml.load(raw);
   }
 
+  // wrap labels (use \n, no HTML)
   function wrapText(str, width){
     const words = String(str||'').split(/\s+/);
     let line = '', out = [];
@@ -105,7 +106,7 @@
       next: s.next,
       yes_to: s.yes_to,
       no_to: s.no_to,
-      laneKey: s.lane || s.lane_key || inferLaneById(s.id) // store as laneKey to avoid name collisions
+      laneKey: s.lane || s.lane_key || inferLaneById(s.id)
     }));
 
     // lane titles
@@ -126,7 +127,7 @@
 
     const anchorIds = [];
 
-    // lanes + nodes + invisible anchors to force vertical stacking
+    // lanes + nodes + invisible anchors; **direction TB inside each subgraph**
     for (const laneKey of allLanes){
       const title = laneMap[laneKey] || laneKey;
       const laneSteps = steps.filter(s => s.laneKey === laneKey);
@@ -137,6 +138,7 @@
       anchorIds.push(anchorId);
 
       L.push(`  subgraph ${laneId}[${title}]`);
+      L.push(`    direction TB`);                     // 👈 force vertical inside lane
       L.push(`    ${anchorId}(( ))`);
       L.push(`    class ${anchorId} ghost`);
 
@@ -158,7 +160,7 @@
       }
     });
 
-    // connect lane anchors to stack lanes vertically
+    // chain lane anchors to stack lanes vertically (A above B)
     if (anchorIds.length > 1){
       for (let i = 0; i < anchorIds.length - 1; i++){
         const A = anchorIds[i];
@@ -167,7 +169,7 @@
       }
     }
 
-    // styles: no lane outlines; rounded nodes; hide anchor nodes
+    // styles: no lane outlines; rounded nodes; hide anchors
     L.push(
       'style CONNECT fill:#f8fafc,stroke:transparent,stroke-width:0px',
       'style STATE_PORTAL fill:#f9fafb,stroke:transparent,stroke-width:0px',
@@ -176,9 +178,7 @@
       'classDef ghost fill:transparent,stroke:transparent'
     );
 
-    // assign classes
     steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
-
     return L.join("\n");
   }
 
@@ -204,7 +204,7 @@
           nodeSpacing: 40,
           rankSpacing: 60,
           padding: 8,
-          ranker: 'tight-tree'
+          ranker: 'tight-tree'   // vertical preference
         }
       });
       mermaid.init(undefined, el);
