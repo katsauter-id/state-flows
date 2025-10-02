@@ -4,7 +4,6 @@
   <meta charset="utf-8" />
   <title>Texas Filing Flow — Portrait</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Stable libs -->
   <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
@@ -12,20 +11,15 @@
     .wrap{max-width:720px;margin:0 auto}
     h1{margin:0 0 8px;font-size:24px;font-weight:800}
     .sub{color:#6b7280;margin-bottom:12px}
-    .legend{display:flex;gap:12px;align-items:center;margin:6px 0 12px;font-size:13px;color:#6b7280}
-    .dot{width:10px;height:10px;border-radius:999px;display:inline-block;margin-right:6px;border:1px solid #e5e7eb}
-    .lane1{background:#f8fafc}
-    .lane2{background:#f9fafb}
     .bar{display:flex;gap:8px;align-items:center;margin:8px 0 12px;flex-wrap:wrap}
     .btn{border:1px solid #e5e7eb;background:#fff;padding:8px 12px;border-radius:10px;cursor:pointer}
     .btn:hover{background:#f0f2f5}
     #chart-wrap{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px}
     #chart svg{width:100% !important;height:auto !important}
-    pre{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:12px;overflow:auto;margin-top:12px}
     @media print {
       @page { size: A4 portrait; margin: 12mm; }
       body { background:#fff; margin:0 }
-      #mer, .bar, .legend, .sub { display:none !important }
+      .bar, .sub { display:none !important }
       .wrap { max-width: 700px }
       #chart-wrap { border:0; padding:0 }
     }
@@ -36,29 +30,20 @@
   <h1 id="title">Texas Filing Flow</h1>
   <div class="sub">Source: <span id="src"></span></div>
 
-  <div class="legend">
-    <span><span class="dot lane1"></span>InsCipher Connect</span>
-    <span><span class="dot lane2"></span>State Portal</span>
-  </div>
-
   <div class="bar">
     <button id="btnRefresh" class="btn">Refresh</button>
     <button id="btnPrint" class="btn">Print PDF</button>
-    <button id="btnDownload" class="btn">Download SVG</button>
   </div>
 
   <div id="chart-wrap">
     <div id="chart"><div id="m" class="mermaid">Loading…</div></div>
   </div>
-
-  <h3 style="margin:16px 0 6px">Mermaid source</h3>
-  <pre id="mer"></pre>
 </div>
 
 <script>
 (async function(){
   const qs = new URL(location.href).searchParams;
-  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default to TX.yaml
+  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   
   document.getElementById("src").textContent = yamlUrl;
 
   async function getYaml(url){
@@ -68,7 +53,6 @@
     return jsyaml.load(raw);
   }
 
-  // wrap labels (use \n, no HTML)
   function wrapText(str, width){
     const words = String(str||'').split(/\s+/);
     let line = '', out = [];
@@ -109,7 +93,6 @@
       laneKey: s.lane || s.lane_key || inferLaneById(s.id)
     }));
 
-    // lane titles
     const laneMap = {};
     if (Array.isArray(data.lanes) && data.lanes.length){
       data.lanes.forEach(l => { laneMap[l.key] = l.title || l.name || l.key; });
@@ -123,11 +106,10 @@
     const allLanes = [...lanesInOrder, ...extraLanes];
 
     const L = [];
-    L.push('flowchart TB'); // portrait direction
+    L.push('flowchart TB');
 
     const anchorIds = [];
 
-    // lanes + nodes + invisible anchors; **direction TB inside each subgraph**
     for (const laneKey of allLanes){
       const title = laneMap[laneKey] || laneKey;
       const laneSteps = steps.filter(s => s.laneKey === laneKey);
@@ -138,10 +120,9 @@
       anchorIds.push(anchorId);
 
       L.push(`  subgraph ${laneId}[${title}]`);
-      L.push(`    direction TB`);                     // 👈 force vertical inside lane
+      L.push(`    direction TB`);
       L.push(`    ${anchorId}(( ))`);
       L.push(`    class ${anchorId} ghost`);
-
       laneSteps.forEach(s => {
         const node = s.type === 'decision' ? `${s.id}{${s.label}}` : `${s.id}[${s.label}]`;
         L.push(`    ${node}`);
@@ -150,7 +131,6 @@
       L.push('');
     }
 
-    // edges between steps
     steps.forEach(s=>{
       if (s.type === 'decision') {
         if (s.yes_to) L.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
@@ -160,7 +140,6 @@
       }
     });
 
-    // chain lane anchors to stack lanes vertically (A above B)
     if (anchorIds.length > 1){
       for (let i = 0; i < anchorIds.length - 1; i++){
         const A = anchorIds[i];
@@ -169,7 +148,6 @@
       }
     }
 
-    // styles: no lane outlines; rounded nodes; hide anchors
     L.push(
       'style CONNECT fill:#f8fafc,stroke:transparent,stroke-width:0px',
       'style STATE_PORTAL fill:#f9fafb,stroke:transparent,stroke-width:0px',
@@ -188,7 +166,6 @@
       document.getElementById("title").textContent = `${data.state || 'State'} Filing Flow`;
 
       const mer = buildMermaid(data);
-      document.getElementById("mer").textContent = mer;
 
       const el = document.getElementById("m");
       el.textContent = mer;
@@ -204,7 +181,7 @@
           nodeSpacing: 40,
           rankSpacing: 60,
           padding: 8,
-          ranker: 'tight-tree'   // vertical preference
+          ranker: 'tight-tree'
         }
       });
       mermaid.init(undefined, el);
@@ -214,19 +191,7 @@
     }
   }
 
-  function downloadSVG(){
-    const svg = document.querySelector('#chart-wrap svg, #chart svg');
-    if(!svg){ alert('No diagram yet. Click Refresh.'); return; }
-    const blob = new Blob([svg.outerHTML], {type:'image/svg+xml'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = (document.getElementById('title').textContent || 'diagram').replace(/\s+/g,'_') + '.svg';
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
   document.getElementById('btnRefresh').onclick = () => render();
-  document.getElementById('btnDownload').onclick = () => downloadSVG();
   document.getElementById('btnPrint').onclick = () => window.print();
 
   render();
