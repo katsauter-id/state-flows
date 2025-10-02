@@ -102,7 +102,8 @@
   }));
 
     // Only include lanes that actually have steps
-     const usedLaneKeys = [...new Set(steps.map(s => s.laneKey))]; // 👈 actual lanes to render
+     const usedLaneKeys = ['connect']; // 👈 only render this lane
+
   const L = [];
   L.push('flowchart TB');
 
@@ -112,11 +113,8 @@
     const laneSteps = steps.filter(s => s.laneKey === laneKey);
     if (!laneSteps.length) continue;
 
-    const laneId = laneKey.toUpperCase();
-    const anchorId = `${laneId}_ANCHOR`;
-    anchorIds.push(anchorId);
-
-    L.push(`  subgraph ${laneId}[" "]`);
+    const laneId = 'CONNECT";
+      L.push('subgraph ${laneId}[""]);
     L.push(`    direction TB`);
     L.push(`    ${anchorId}(( ))`);
     L.push(`    class ${anchorId} ghost`);
