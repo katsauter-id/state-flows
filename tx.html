@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>State Filing Flow</title>
+  <title>Texas Filing Flow</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- Stable libs -->
   <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
@@ -26,7 +26,7 @@
 </head>
 <body>
 <div class="wrap">
-  <h1 id="title">State Filing Flow</h1>
+  <h1 id="title">Texas Filing Flow</h1>
   <div class="sub">Source: <span id="src"></span></div>
 
   <div class="legend">
@@ -48,7 +48,7 @@
 <script>
 (async function(){
   const qs = new URL(location.href).searchParams;
-  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default if no param
+  const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default to TX.yaml
   document.getElementById("src").textContent = yamlUrl;
 
   async function getYaml(url){
@@ -58,15 +58,17 @@
     return jsyaml.load(raw);
   }
 
+  // “Dash style” labels that we know render well
   const esc = t => String(t||"")
-    .replace(/\s*\(([^)]+)\)/g, " - $1")
-    .replace(/\r?\n/g, " ")
-    .replace(/\[/g,"(").replace(/\]/g,")")
+    .replace(/\s*\(([^)]+)\)/g, " - $1")  // (foo) ->  - foo
+    .replace(/\r?\n/g, " ")               // single line
+    .replace(/\[/g,"(").replace(/\]/g,")")// avoid bracket collisions
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
     .trim();
 
   function inferLane(id){
-    if (/^(open_connect|start_filing|fix_address|archive_receipt)/.test(id)) return 'connect';
+    // If you add a State Portal lane later, this keeps older YAMLs working
+    if (/^(open_connect|start_filing|fix_address|archive_receipt|download_policy|verify_)/.test(id)) return 'connect';
     return 'state_portal';
   }
 
@@ -81,6 +83,7 @@
       lane: s.lane || s.lane_key || inferLane(s.id)
     }));
 
+    // Lane titles (defaults if not provided)
     const laneMap = {};
     if (Array.isArray(data.lanes) && data.lanes.length){
       data.lanes.forEach(l => laneMap[l.key] = l.title || l.name || l.key);
@@ -94,12 +97,14 @@
     const allLanes = [...lanesInOrder, ...extraLanes];
 
     const L = [];
-    L.push('flowchart TB');
+    L.push('flowchart TB'); // vertical layout
 
+    // Lanes + nodes
     for (const lane of allLanes){
       const title = laneMap[lane] || lane;
       const laneSteps = steps.filter(s => s.lane === lane);
       if (!laneSteps.length) continue;
+
       const laneId = lane.toUpperCase();
       L.push(`  subgraph ${laneId}[${title}]`);
       laneSteps.forEach(s => {
@@ -110,6 +115,7 @@
       L.push('');
     }
 
+    // Edges
     steps.forEach(s=>{
       if (s.type === 'decision') {
         if (s.yes_to) L.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
@@ -119,7 +125,7 @@
       }
     });
 
-    // styles: no swimlane outlines (stroke:transparent)
+    // Styles: no lane outlines (stroke transparent), rounded nodes
     L.push(
       'style CONNECT fill:#f8fafc,stroke:transparent,stroke-width:0px',
       'style STATE_PORTAL fill:#f9fafb,stroke:transparent,stroke-width:0px',
@@ -165,6 +171,7 @@
   document.getElementById('btnRefresh').onclick = () => render();
   document.getElementById('btnDownload').onclick = () => downloadSVG();
 
+  // Initial render
   render();
 })();
 </script>
