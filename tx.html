@@ -9,7 +9,7 @@
   <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
     body { font-family: Inter, Tahoma, Arial, sans-serif; margin:24px; background:#f5f6f8; color:#111827 }
-    .wrap{max-width:720px;margin:0 auto} /* portrait-friendly width */
+    .wrap{max-width:720px;margin:0 auto}
     h1{margin:0 0 8px;font-size:24px;font-weight:800}
     .sub{color:#6b7280;margin-bottom:12px}
     .legend{display:flex;gap:12px;align-items:center;margin:6px 0 12px;font-size:13px;color:#6b7280}
@@ -22,8 +22,6 @@
     #chart-wrap{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px}
     #chart svg{width:100% !important;height:auto !important}
     pre{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:12px;overflow:auto;margin-top:12px}
-
-    /* Print-friendly portrait */
     @media print {
       @page { size: A4 portrait; margin: 12mm; }
       body { background:#fff; margin:0 }
@@ -63,7 +61,6 @@
   const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default to TX.yaml
   document.getElementById("src").textContent = yamlUrl;
 
-  // fetch + parse YAML
   async function getYaml(url){
     const res = await fetch(url, { cache: "no-store" });
     if(!res.ok) throw new Error("Fetch failed " + res.status + " for " + url);
@@ -71,7 +68,6 @@
     return jsyaml.load(raw);
   }
 
-  // wrap labels to keep nodes narrow (no HTML; \n only)
   function wrapText(str, width){
     const words = String(str||'').split(/\s+/);
     let line = '', out = [];
@@ -87,7 +83,6 @@
     return out.join('\\n');
   }
 
-  // Labels: convert ( ) → " - ", wrap ~28 chars, escape brackets/entities
   const esc = t => {
     const dash = String(t||'').replace(/\s*\(([^)]+)\)/g, ' - $1');
     const wrapped = wrapText(dash, 28);
@@ -97,7 +92,7 @@
       .trim();
   };
 
-  function inferLane(id){
+  function inferLaneById(id){
     if (/^(open_connect|start_filing|fix_address|archive_receipt|download_policy|verify_)/.test(id)) return 'connect';
     return 'state_portal';
   }
@@ -110,36 +105,34 @@
       next: s.next,
       yes_to: s.yes_to,
       no_to: s.no_to,
-      lane: s.lane || s.lane_key || inferLane(s.id)
+      laneKey: s.lane || s.lane_key || inferLaneById(s.id) // store as laneKey to avoid name collisions
     }));
 
     // lane titles
     const laneMap = {};
     if (Array.isArray(data.lanes) && data.lanes.length){
-      data.lanes.forEach(l => laneMap[l.key] = l.title || l.name || l.key);
+      data.lanes.forEach(l => { laneMap[l.key] = l.title || l.name || l.key; });
     } else {
       laneMap.connect = 'InsCipher Connect';
       laneMap.state_portal = 'State Portal';
     }
 
     const lanesInOrder = Object.keys(laneMap);
-    const extraLanes = [...new Set(steps.map(s=>s.lane))].filter(k => !lanesInOrder.includes(k));
+    const extraLanes = [...new Set(steps.map(s=>s.laneKey))].filter(k => !lanesInOrder.includes(k));
     const allLanes = [...lanesInOrder, ...extraLanes];
 
     const L = [];
     L.push('flowchart TB'); // portrait direction
 
-    const firstNodeByLane = {};
-    const lastNodeByLane  = {};
     const anchorIds = [];
 
     // lanes + nodes + invisible anchors to force vertical stacking
-    for (const lane of allLanes){
-      const title = laneMap[lane] || lane;
-      const laneSteps = steps.filter(s => s.lane === lane);
+    for (const laneKey of allLanes){
+      const title = laneMap[laneKey] || laneKey;
+      const laneSteps = steps.filter(s => s.laneKey === laneKey);
       if (!laneSteps.length) continue;
 
-      const laneId = lane.toUpperCase();
+      const laneId = laneKey.toUpperCase();
       const anchorId = `${laneId}_ANCHOR`;
       anchorIds.push(anchorId);
 
@@ -147,11 +140,9 @@
       L.push(`    ${anchorId}(( ))`);
       L.push(`    class ${anchorId} ghost`);
 
-      laneSteps.forEach((s, idx) => {
+      laneSteps.forEach(s => {
         const node = s.type === 'decision' ? `${s.id}{${s.label}}` : `${s.id}[${s.label}]`;
         L.push(`    ${node}`);
-        if (idx === 0) firstNodeByLane[laneId] = s.id;
-        lastNodeByLane[laneId] = s.id;
       });
       L.push('  end');
       L.push('');
@@ -167,7 +158,7 @@
       }
     });
 
-    // connect lane anchors to stack lanes vertically (A above B above C)
+    // connect lane anchors to stack lanes vertically
     if (anchorIds.length > 1){
       for (let i = 0; i < anchorIds.length - 1; i++){
         const A = anchorIds[i];
@@ -185,7 +176,9 @@
       'classDef ghost fill:transparent,stroke:transparent'
     );
 
+    // assign classes
     steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
+
     return L.join("\n");
   }
 
@@ -201,7 +194,6 @@
       el.textContent = mer;
       el.removeAttribute("data-processed");
 
-      // portrait-friendly layout
       mermaid.initialize({
         startOnLoad:false,
         theme:'default',
@@ -212,7 +204,7 @@
           nodeSpacing: 40,
           rankSpacing: 60,
           padding: 8,
-          ranker: 'tight-tree'   // force vertical stacking preference
+          ranker: 'tight-tree'
         }
       });
       mermaid.init(undefined, el);
@@ -233,12 +225,10 @@
     URL.revokeObjectURL(a.href);
   }
 
-  // buttons
   document.getElementById('btnRefresh').onclick = () => render();
   document.getElementById('btnDownload').onclick = () => downloadSVG();
   document.getElementById('btnPrint').onclick = () => window.print();
 
-  // initial render
   render();
 })();
 </script>
