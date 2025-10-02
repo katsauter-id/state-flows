@@ -1,0 +1,74 @@
+state: "Texas"
+direction: TB
+
+lanes:
+  - key: connect
+    title: "InsCipher Connect"
+
+steps:
+  - id: open_connect
+    lane: connect
+    type: action
+    label: "Open InsCipher Connect"
+    next: download_policy
+
+  - id: download_policy
+    lane: connect
+    type: action
+    label: "Download policy declarations - PDF"
+    next: verify_core
+
+  - id: verify_core
+    lane: connect
+    type: action
+    label: "Verify policy number - lines of business - carrier - limits"
+    next: verify_dates
+
+  - id: verify_dates
+    lane: connect
+    type: action
+    label: "Verify effective date - expiration date"
+    next: verify_money
+
+  - id: verify_money
+    lane: connect
+    type: action
+    label: "Verify premium - broker fee - carrier fee - tax - stamping fee"
+    next: verify_insured
+
+  - id: verify_insured
+    lane: connect
+    type: action
+    label: "Verify insured name - mailing address - physical address"
+    next: details_match
+
+  - id: details_match
+    lane: connect
+    type: decision
+    label: "Do all details match the policy?"
+    yes_to: check_license
+    no_to: correct_details
+
+  - id: correct_details
+    lane: connect
+    type: action
+    label: "Correct any mismatches based on declarations - save changes"
+    next: details_match
+
+  - id: check_license
+    lane: connect
+    type: decision
+    label: "Filed under the agency default license?"
+    yes_to: add_to_queue
+    no_to: set_default_license
+
+  - id: set_default_license
+    lane: connect
+    type: action
+    label: "Switch to default agency license - confirm selection"
+    next: check_license
+
+  - id: add_to_queue
+    lane: connect
+    type: action
+    label: "Add to e-file queue in Connect"
