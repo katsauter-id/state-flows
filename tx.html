@@ -105,6 +105,17 @@
   }
 
   function buildMermaid(data){
+    const laneId = lane.toUpperCase();
+    const anchorId = `${laneId}_ANCHOR`;
+    L.push(`  subgraph ${laneId}[${title}]`);
+    L.push(`    ${anchorId}(( ))`);   // 👈 invisible anchor node at the top
+    laneSteps.forEach(s => {
+      const node = s.type === 'decision' ? `${s.id}{${s.label}}` : `${s.id}[${s.label}]`;
+      L.push(`    ${node}`);
+  });
+    L.push('  end');
+    L.push('');
+
     const steps = (data.steps || []).map(s => ({
       id: s.id,
       type: s.type || 'action',
