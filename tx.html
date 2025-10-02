@@ -9,7 +9,7 @@
   <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
   <style>
     body { font-family: Inter, Tahoma, Arial, sans-serif; margin:24px; background:#f5f6f8; color:#111827 }
-    .wrap{max-width:720px;margin:0 auto} /* 👈 Portrait-friendly width */
+    .wrap{max-width:720px;margin:0 auto} /* portrait-friendly width */
     h1{margin:0 0 8px;font-size:24px;font-weight:800}
     .sub{color:#6b7280;margin-bottom:12px}
     .legend{display:flex;gap:12px;align-items:center;margin:6px 0 12px;font-size:13px;color:#6b7280}
@@ -18,9 +18,8 @@
     .lane2{background:#f9fafb}
     .bar{display:flex;gap:8px;align-items:center;margin:8px 0 12px;flex-wrap:wrap}
     .btn{border:1px solid #e5e7eb;background:#fff;padding:8px 12px;border-radius:10px;cursor:pointer}
-    .btn:hover{background:#f9fafb}
+    .btn:hover{background:#f0f2f5}
     #chart-wrap{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:12px}
-    #chart{transform-origin: top center;} /* zoom anchor */
     #chart svg{width:100% !important;height:auto !important}
     pre{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:12px;overflow:auto;margin-top:12px}
 
@@ -28,9 +27,9 @@
     @media print {
       @page { size: A4 portrait; margin: 12mm; }
       body { background:#fff; margin:0 }
-      #mer { display:none }
-      .bar, .legend, .sub { display:none }
+      #mer, .bar, .legend, .sub { display:none !important }
       .wrap { max-width: 700px }
+      #chart-wrap { border:0; padding:0 }
     }
   </style>
 </head>
@@ -46,9 +45,7 @@
 
   <div class="bar">
     <button id="btnRefresh" class="btn">Refresh</button>
-    <button id="btnZoomIn" class="btn">Zoom +</button>
-    <button id="btnZoomOut" class="btn">Zoom −</button>
-    <button id="btnZoomReset" class="btn">Reset</button>
+    <button id="btnPrint" class="btn">Print PDF</button>
     <button id="btnDownload" class="btn">Download SVG</button>
   </div>
 
@@ -66,10 +63,8 @@
   const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default to TX.yaml
   document.getElementById("src").textContent = yamlUrl;
 
-  let scale = 1;
-  function applyScale(){
-    document.getElementById('chart').style.transform = `scale(${scale})`;
-  }
+  // settings
+  const STACK_LANES_VERTICALLY = true; // 👈 key: stack lanes one above the other
 
   async function getYaml(url){
     const res = await fetch(url, { cache: "no-store" });
@@ -78,13 +73,31 @@
     return jsyaml.load(raw);
   }
 
-  // Labels: keep single-line; convert ( ) to " - "
-  const esc = t => String(t||"")
-    .replace(/\s*\(([^)]+)\)/g, " - $1")
-    .replace(/\r?\n/g, " ")
-    .replace(/\[/g,"(").replace(/\]/g,")")
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
-    .trim();
+  // wrap labels to keep nodes narrow (no HTML; use \n)
+  function wrapText(str, width){
+    const words = String(str||'').split(/\s+/);
+    let line = '', out = [];
+    words.forEach(w=>{
+      if((line + ' ' + w).trim().length > width){
+        if(line) out.push(line.trim());
+        line = w;
+      } else {
+        line = (line ? line + ' ' : '') + w;
+      }
+    });
+    if(line) out.push(line.trim());
+    return out.join('\\n'); // Mermaid supports \n in labels
+  }
+
+  // Labels: convert ( ) → " - ", wrap to ~28 chars, escape brackets/entities
+  const esc = t => {
+    const dash = String(t||'').replace(/\s*\(([^)]+)\)/g, ' - $1');
+    const wrapped = wrapText(dash, 28);
+    return wrapped
+      .replace(/\[/g,'(').replace(/\]/g,')')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .trim();
+  };
 
   function inferLane(id){
     if (/^(open_connect|start_filing|fix_address|archive_receipt|download_policy|verify_)/.test(id)) return 'connect';
@@ -115,10 +128,12 @@
     const allLanes = [...lanesInOrder, ...extraLanes];
 
     const L = [];
-    // Portrait = vertical direction
-    L.push('flowchart TB');
+    L.push('flowchart TB'); // portrait direction
 
-    // lanes + nodes (stacked vertically inside each subgraph)
+    const firstNodeByLane = {};
+    const lastNodeByLane  = {};
+
+    // Lanes + nodes
     for (const lane of allLanes){
       const title = laneMap[lane] || lane;
       const laneSteps = steps.filter(s => s.lane === lane);
@@ -126,15 +141,17 @@
 
       const laneId = lane.toUpperCase();
       L.push(`  subgraph ${laneId}[${title}]`);
-      laneSteps.forEach(s => {
+      laneSteps.forEach((s, idx) => {
         const node = s.type === 'decision' ? `${s.id}{${s.label}}` : `${s.id}[${s.label}]`;
         L.push(`    ${node}`);
+        if (idx === 0) firstNodeByLane[laneId] = s.id;
+        lastNodeByLane[laneId] = s.id;
       });
       L.push('  end');
       L.push('');
     }
 
-    // edges
+    // Edges between steps
     steps.forEach(s=>{
       if (s.type === 'decision') {
         if (s.yes_to) L.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
@@ -144,6 +161,17 @@
       }
     });
 
+    // Force subgraphs to stack vertically (portrait) instead of side-by-side
+    if (STACK_LANES_VERTICALLY && allLanes.length > 1){
+      for (let i=0; i<allLanes.length-1; i++){
+        const A = allLanes[i].toUpperCase();
+        const B = allLanes[i+1].toUpperCase();
+        if (lastNodeByLane[A] && firstNodeByLane[B]) {
+          L.push(`  ${lastNodeByLane[A]} -.-> ${firstNodeByLane[B]}`); // invisible-ish ordering edge
+        }
+      }
+    }
+
     // styles: no lane outlines; rounded nodes
     L.push(
       'style CONNECT fill:#f8fafc,stroke:transparent,stroke-width:0px',
@@ -152,9 +180,7 @@
       'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827,rx:12,ry:12'
     );
 
-    // assign classes
     steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
-
     return L.join("\n");
   }
 
@@ -170,7 +196,6 @@
       el.textContent = mer;
       el.removeAttribute("data-processed");
 
-      // Portrait-friendly spacing: straight lines, slightly tighter ranks
       mermaid.initialize({
         startOnLoad:false,
         theme:'default',
@@ -178,15 +203,12 @@
           curve:'linear',
           htmlLabels:false,
           useMaxWidth:true,
-          nodeSpacing: 40,  // default ~50; reduce to keep it narrow
-          rankSpacing: 60,  // vertical spacing between rows
+          nodeSpacing: 40,  // tighter
+          rankSpacing: 60,  // portrait vertical spacing
           padding: 8
         }
       });
       mermaid.init(undefined, el);
-
-      // reset zoom each render
-      scale = 1; applyScale();
     } catch(e){
       document.getElementById("m").textContent = "Error: " + (e?.message || e);
       console.error(e);
@@ -194,7 +216,7 @@
   }
 
   function downloadSVG(){
-    const svg = document.querySelector('#chart svg');
+    const svg = document.querySelector('#chart-wrap svg, #chart svg');
     if(!svg){ alert('No diagram yet. Click Refresh.'); return; }
     const blob = new Blob([svg.outerHTML], {type:'image/svg+xml'});
     const a = document.createElement('a');
@@ -204,12 +226,10 @@
     URL.revokeObjectURL(a.href);
   }
 
-  // zoom controls
+  // Buttons
   document.getElementById('btnRefresh').onclick = () => render();
   document.getElementById('btnDownload').onclick = () => downloadSVG();
-  document.getElementById('btnZoomIn').onclick = () => { scale = Math.min(2.0, +(scale + 0.1).toFixed(2)); applyScale(); };
-  document.getElementById('btnZoomOut').onclick = () => { scale = Math.max(0.6, +(scale - 0.1).toFixed(2)); applyScale(); };
-  document.getElementById('btnZoomReset').onclick = () => { scale = 1; applyScale(); };
+  document.getElementById('btnPrint').onclick = () => window.print();
 
   // initial render
   render();
