@@ -45,6 +45,8 @@
   const qs = new URL(location.href).searchParams;
   const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default to TX.yaml
   document.getElementById("src").textContent = yamlUrl;
+  const FORCE_SINGLE_LANE = true;   // 👈 collapse all steps into the "connect" lane
+
 
   async function getYaml(url){
     const res = await fetch(url, { cache: "no-store" });
@@ -84,15 +86,20 @@
   }
 
   function buildMermaid(data){
-    const steps = (data.steps || []).map(s => ({
-      id: s.id,
-      type: s.type || 'action',
-      label: esc(s.label || s.id),
-      next: s.next,
-      yes_to: s.yes_to,
-      no_to: s.no_to,
-      laneKey: s.lane || s.lane_key || inferLaneById(s.id)
-    }));
+  const declaredLaneKeys = Array.isArray(data.lanes) ? data.lanes.map(l => l.key) : [];
+  const singleLaneDeclared = declaredLaneKeys.length === 1 ? declaredLaneKeys[0] : 'connect';
+
+  const steps = (data.steps || []).map(s => ({
+    id: s.id,
+    type: s.type || 'action',
+    label: esc(s.label || s.id),
+    next: s.next,
+    yes_to: s.yes_to,
+    no_to: s.no_to,
+    laneKey: FORCE_SINGLE_LANE
+      ? 'connect'                                   // 👈 force single lane
+      : (s.lane || s.lane_key || singleLaneDeclared || 'connect')
+  }));
 
     // Only include lanes that actually have steps
     const usedLaneKeys = [...new Set(steps.map(s=>s.laneKey))];
