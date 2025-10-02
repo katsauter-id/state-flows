@@ -63,9 +63,7 @@
   const yamlUrl = qs.get("yaml") || "./states/TX.yaml";   // default to TX.yaml
   document.getElementById("src").textContent = yamlUrl;
 
-  // settings
-  const STACK_LANES_VERTICALLY = true; // 👈 key: stack lanes one above the other
-
+  // fetch + parse YAML
   async function getYaml(url){
     const res = await fetch(url, { cache: "no-store" });
     if(!res.ok) throw new Error("Fetch failed " + res.status + " for " + url);
@@ -73,23 +71,23 @@
     return jsyaml.load(raw);
   }
 
-  // wrap labels to keep nodes narrow (no HTML; use \n)
+  // wrap labels to keep nodes narrow (no HTML; \n only)
   function wrapText(str, width){
     const words = String(str||'').split(/\s+/);
     let line = '', out = [];
-    words.forEach(w=>{
-      if((line + ' ' + w).trim().length > width){
-        if(line) out.push(line.trim());
+    for (const w of words){
+      if ((line + ' ' + w).trim().length > width){
+        if (line) out.push(line.trim());
         line = w;
       } else {
         line = (line ? line + ' ' : '') + w;
       }
-    });
-    if(line) out.push(line.trim());
-    return out.join('\\n'); // Mermaid supports \n in labels
+    }
+    if (line) out.push(line.trim());
+    return out.join('\\n');
   }
 
-  // Labels: convert ( ) → " - ", wrap to ~28 chars, escape brackets/entities
+  // Labels: convert ( ) → " - ", wrap ~28 chars, escape brackets/entities
   const esc = t => {
     const dash = String(t||'').replace(/\s*\(([^)]+)\)/g, ' - $1');
     const wrapped = wrapText(dash, 28);
@@ -105,17 +103,6 @@
   }
 
   function buildMermaid(data){
-    const laneId = lane.toUpperCase();
-    const anchorId = `${laneId}_ANCHOR`;
-    L.push(`  subgraph ${laneId}[${title}]`);
-    L.push(`    ${anchorId}(( ))`);   // 👈 invisible anchor node at the top
-    laneSteps.forEach(s => {
-      const node = s.type === 'decision' ? `${s.id}{${s.label}}` : `${s.id}[${s.label}]`;
-      L.push(`    ${node}`);
-  });
-    L.push('  end');
-    L.push('');
-
     const steps = (data.steps || []).map(s => ({
       id: s.id,
       type: s.type || 'action',
@@ -126,6 +113,7 @@
       lane: s.lane || s.lane_key || inferLane(s.id)
     }));
 
+    // lane titles
     const laneMap = {};
     if (Array.isArray(data.lanes) && data.lanes.length){
       data.lanes.forEach(l => laneMap[l.key] = l.title || l.name || l.key);
@@ -143,15 +131,22 @@
 
     const firstNodeByLane = {};
     const lastNodeByLane  = {};
+    const anchorIds = [];
 
-    // Lanes + nodes
+    // lanes + nodes + invisible anchors to force vertical stacking
     for (const lane of allLanes){
       const title = laneMap[lane] || lane;
       const laneSteps = steps.filter(s => s.lane === lane);
       if (!laneSteps.length) continue;
 
       const laneId = lane.toUpperCase();
+      const anchorId = `${laneId}_ANCHOR`;
+      anchorIds.push(anchorId);
+
       L.push(`  subgraph ${laneId}[${title}]`);
+      L.push(`    ${anchorId}(( ))`);
+      L.push(`    class ${anchorId} ghost`);
+
       laneSteps.forEach((s, idx) => {
         const node = s.type === 'decision' ? `${s.id}{${s.label}}` : `${s.id}[${s.label}]`;
         L.push(`    ${node}`);
@@ -162,7 +157,7 @@
       L.push('');
     }
 
-    // Edges between steps
+    // edges between steps
     steps.forEach(s=>{
       if (s.type === 'decision') {
         if (s.yes_to) L.push(`  ${s.id} -- Yes --> ${s.yes_to}`);
@@ -172,23 +167,22 @@
       }
     });
 
-    // Force subgraphs to stack vertically (portrait) instead of side-by-side
-    if (STACK_LANES_VERTICALLY && allLanes.length > 1){
-      for (let i=0; i<allLanes.length-1; i++){
-        const A = allLanes[i].toUpperCase();
-        const B = allLanes[i+1].toUpperCase();
-        if (lastNodeByLane[A] && firstNodeByLane[B]) {
-          L.push(`  ${lastNodeByLane[A]} -.-> ${firstNodeByLane[B]}`); // invisible-ish ordering edge
-        }
+    // connect lane anchors to stack lanes vertically (A above B above C)
+    if (anchorIds.length > 1){
+      for (let i = 0; i < anchorIds.length - 1; i++){
+        const A = anchorIds[i];
+        const B = anchorIds[i+1];
+        L.push(`  ${A} -.-> ${B}`);
       }
     }
 
-    // styles: no lane outlines; rounded nodes
+    // styles: no lane outlines; rounded nodes; hide anchor nodes
     L.push(
       'style CONNECT fill:#f8fafc,stroke:transparent,stroke-width:0px',
       'style STATE_PORTAL fill:#f9fafb,stroke:transparent,stroke-width:0px',
       'classDef action fill:#ffffff,stroke:#4f46e5,stroke-width:1.4px,color:#111827,rx:8,ry:8',
-      'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827,rx:12,ry:12'
+      'classDef decision fill:#fff7ed,stroke:#f04f23,stroke-width:2px,color:#111827,rx:12,ry:12',
+      'classDef ghost fill:transparent,stroke:transparent'
     );
 
     steps.forEach(s => L.push(`class ${s.id} ${s.type === 'decision' ? 'decision' : 'action'}`));
@@ -207,20 +201,20 @@
       el.textContent = mer;
       el.removeAttribute("data-processed");
 
-     mermaid.initialize({
-  startOnLoad:false,
-  theme:'default',
-  flowchart:{
-    curve:'linear',
-    htmlLabels:false,
-    useMaxWidth:true,
-    nodeSpacing: 40,
-    rankSpacing: 60,
-    padding: 8,
-    ranker: 'tight-tree'   // 👈 force vertical stacking preference
-  }
-});
-
+      // portrait-friendly layout
+      mermaid.initialize({
+        startOnLoad:false,
+        theme:'default',
+        flowchart:{
+          curve:'linear',
+          htmlLabels:false,
+          useMaxWidth:true,
+          nodeSpacing: 40,
+          rankSpacing: 60,
+          padding: 8,
+          ranker: 'tight-tree'   // force vertical stacking preference
+        }
+      });
       mermaid.init(undefined, el);
     } catch(e){
       document.getElementById("m").textContent = "Error: " + (e?.message || e);
@@ -239,7 +233,7 @@
     URL.revokeObjectURL(a.href);
   }
 
-  // Buttons
+  // buttons
   document.getElementById('btnRefresh').onclick = () => render();
   document.getElementById('btnDownload').onclick = () => downloadSVG();
   document.getElementById('btnPrint').onclick = () => window.print();
